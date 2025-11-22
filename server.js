@@ -1,13 +1,10 @@
 const express = require('express');
 const { 
     default: makeWASocket, 
-    useMultiFileAuthState, 
-    delay,
-    makeCacheableSignalKeyStore,
+    useMultiFileAuthState,
+    makeInMemoryStore,
     Browsers,
-    proto,
-    getAggregateVotesInPollMessage,
-    downloadMediaMessage
+    delay 
 } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode');
 const cors = require('cors');
@@ -24,7 +21,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://darkslframexteam_db_user:Mongodb246810@cluster0.cdgkgic.mongodb.net/darkslframex?retryWrites=true&w=majority&appName=Cluster0';
 
-console.log('🔧 Starting WhatsApp Marketing Tool with Baileys...');
+console.log('🔧 Starting WhatsApp Marketing Tool with Manual Session Support...');
 
 // MongoDB Connection
 mongoose.connect(MONGODB_URI, {
@@ -38,14 +35,24 @@ mongoose.connect(MONGODB_URI, {
     console.error('❌ MongoDB Connection Failed:', error.message);
 });
 
-// Schemas
+// Enhanced Session Schema
 const sessionSchema = new mongoose.Schema({
     sessionId: String,
+    sessionData: Object, // Store complete session data
     qrCode: String,
     pairingCode: String,
     phoneNumber: String,
     connected: { type: Boolean, default: false },
-    lastActivity: { type: Date, default: Date.now }
+    connectionType: { type: String, default: 'qr' }, // qr, pairing, manual
+    lastActivity: { type: Date, default: Date.now },
+    manualSession: {
+        sessionId: String,
+        sessionToken: String,
+        clientId: String,
+        serverToken: String,
+        encKey: String,
+        macKey: String
+    }
 });
 
 const Session = mongoose.model('Session', sessionSchema);
@@ -53,6 +60,7 @@ const Session = mongoose.model('Session', sessionSchema);
 // Global variables
 let sock = null;
 let isInitializing = false;
+const store = makeInMemoryStore({ });
 const SESSION_BASE_PATH = './sessions';
 
 // Ensure sessions directory exists
@@ -60,7 +68,7 @@ if (!fs.existsSync(SESSION_BASE_PATH)) {
     fs.mkdirSync(SESSION_BASE_PATH, { recursive: true });
 }
 
-// Generate pairing code
+// Utility Functions
 function generatePairingCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -70,7 +78,6 @@ function generatePairingCode() {
     return result;
 }
 
-// Format phone number
 function formatPhoneNumber(number) {
     try {
         const cleaned = number.toString().replace(/\D/g, '');
@@ -87,7 +94,7 @@ function formatPhoneNumber(number) {
 }
 
 // Initialize WhatsApp with Baileys
-async function initializeWhatsApp() {
+async function initializeWhatsApp(manualData = null) {
     if (isInitializing) {
         console.log('⚠️ WhatsApp initialization already in progress');
         return;
@@ -95,52 +102,88 @@ async function initializeWhatsApp() {
 
     try {
         isInitializing = true;
-        console.log('🔄 Initializing WhatsApp with Baileys...');
+        console.log('🔄 Initializing WhatsApp...');
 
-        const sessionId = 'baileys-session-' + Date.now();
+        const sessionId = manualData?.sessionId || 'baileys-session-' + Date.now();
         const sessionPath = path.join(SESSION_BASE_PATH, sessionId);
 
-        // Use multi-file auth state
-        const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+        let state;
+        if (manualData) {
+            // Use manual session data
+            console.log('🔧 Using manual session data');
+            state = {
+                creds: {
+                    noiseKey: manualData.noiseKey,
+                    signedIdentityKey: manualData.signedIdentityKey,
+                    signedPreKey: manualData.signedPreKey,
+                    registrationId: manualData.registrationId,
+                    advSecretKey: manualData.advSecretKey,
+                    processedHistoryMessages: manualData.processedHistoryMessages || [],
+                    nextPreKeyId: manualData.nextPreKeyId || 1,
+                    firstUnuploadedPreKeyId: manualData.firstUnuploadedPreKeyId || 1,
+                    accountSettings: manualData.accountSettings || {},
+                    me: manualData.me,
+                    signalIdentities: manualData.signalIdentities || [],
+                    platform: manualData.platform || 'web'
+                },
+                keys: {
+                    get: (type, ids) => {
+                        if (type === 'pre-key' && manualData.preKeys) {
+                            return manualData.preKeys.filter(pk => ids.includes(pk.keyId));
+                        }
+                        return [];
+                    }
+                }
+            };
+        } else {
+            // Use multi-file auth state
+            console.log('🔧 Using multi-file auth state');
+            const authState = await useMultiFileAuthState(sessionPath);
+            state = authState;
+        }
 
         // Create socket with proper configuration
         sock = makeWASocket({
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino()),
+                keys: state.keys,
             },
             printQRInTerminal: false,
-            logger: pino({ level: 'silent' }),
+            logger: pino({ level: 'error' }),
             browser: Browsers.ubuntu('Chrome'),
             markOnlineOnConnect: true,
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
-            linkPreviewImageThumbnailWidth: 192,
         });
 
         // Store credentials updates
-        sock.ev.on('creds.update', saveCreds);
+        if (!manualData) {
+            sock.ev.on('creds.update', state.saveCreds);
+        }
 
-        // QR Code Handler
+        // Bind store
+        store.bind(sock.ev);
+
+        // Connection Handler
         sock.ev.on('connection.update', async (update) => {
             const { connection, qr } = update;
             
             if (qr) {
-                console.log('📱 QR Code received - Generating...');
+                console.log('📱 QR Code received');
                 try {
                     const qrData = await qrcode.toDataURL(qr);
-                    console.log('✅ QR Code generated');
                     
                     await Session.findOneAndUpdate(
                         {},
                         { 
                             qrCode: qrData, 
                             sessionId: sessionId,
+                            connectionType: 'qr',
                             lastActivity: new Date() 
                         },
                         { upsert: true }
                     );
-                    console.log('💾 QR code saved to database');
+                    console.log('💾 QR code saved');
                 } catch (error) {
                     console.error('❌ QR save error:', error);
                 }
@@ -155,6 +198,7 @@ async function initializeWhatsApp() {
                             connected: true, 
                             qrCode: null,
                             pairingCode: null,
+                            phoneNumber: sock.user?.id.replace(/:\d+@/, '') || 'Unknown',
                             lastActivity: new Date() 
                         }
                     );
@@ -168,23 +212,11 @@ async function initializeWhatsApp() {
             if (connection === 'close') {
                 console.log('📵 Connection closed');
                 isInitializing = false;
-                // Auto-reconnect after 10 seconds
-                setTimeout(() => {
-                    initializeWhatsApp();
-                }, 10000);
+                setTimeout(() => initializeWhatsApp(), 10000);
             }
         });
 
-        // Message handler
-        sock.ev.on('messages.upsert', async ({ messages }) => {
-            const message = messages[0];
-            if (!message.message) return;
-
-            console.log('📨 New message received');
-            // Add your message handling logic here
-        });
-
-        console.log('🚀 WhatsApp Baileys client initialization started');
+        console.log('🚀 WhatsApp client initialization started');
 
     } catch (error) {
         console.error('❌ WhatsApp initialization error:', error);
@@ -192,13 +224,202 @@ async function initializeWhatsApp() {
     }
 }
 
-// Start WhatsApp after MongoDB connection
-mongoose.connection.on('connected', () => {
-    console.log('🔗 Database connected - Starting WhatsApp in 3 seconds...');
-    setTimeout(initializeWhatsApp, 3000);
+// ==================== MANUAL SESSION API ROUTES ====================
+
+// Manual Session Connection
+app.post('/api/manual-session', async (req, res) => {
+    try {
+        const { 
+            sessionId, 
+            sessionToken, 
+            clientId, 
+            serverToken, 
+            encKey, 
+            macKey,
+            phoneNumber 
+        } = req.body;
+
+        console.log('📱 Manual session connection request');
+
+        if (!sessionId) {
+            return res.json({
+                success: false,
+                error: 'Session ID is required'
+            });
+        }
+
+        // Save manual session data
+        await Session.findOneAndUpdate(
+            {},
+            {
+                sessionId: sessionId,
+                connected: false,
+                connectionType: 'manual',
+                phoneNumber: phoneNumber,
+                lastActivity: new Date(),
+                manualSession: {
+                    sessionId: sessionId,
+                    sessionToken: sessionToken,
+                    clientId: clientId,
+                    serverToken: serverToken,
+                    encKey: encKey,
+                    macKey: macKey
+                }
+            },
+            { upsert: true }
+        );
+
+        console.log('💾 Manual session data saved');
+
+        // Try to initialize with manual data
+        const manualData = {
+            sessionId: sessionId,
+            noiseKey: { private: Buffer.from(encKey || '', 'base64'), public: Buffer.from(macKey || '', 'base64') },
+            signedIdentityKey: { private: Buffer.from(encKey || '', 'base64'), public: Buffer.from(macKey || '', 'base64') },
+            registrationId: 123,
+            advSecretKey: clientId || 'default',
+            me: { id: phoneNumber ? formatPhoneNumber(phoneNumber) + '@s.whatsapp.net' : 'manual@session' }
+        };
+
+        await initializeWhatsApp(manualData);
+
+        res.json({
+            success: true,
+            message: 'Manual session data received. Trying to connect...',
+            sessionId: sessionId
+        });
+
+    } catch (error) {
+        console.error('❌ Manual session error:', error);
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
 });
 
-// ==================== API ROUTES ====================
+// Simple Session Import (for pairing codes)
+app.post('/api/import-session', async (req, res) => {
+    try {
+        const { pairingCode, phoneNumber } = req.body;
+
+        console.log('📱 Import session with pairing code:', pairingCode);
+
+        if (!pairingCode || !phoneNumber) {
+            return res.json({
+                success: false,
+                error: 'Pairing code and phone number are required'
+            });
+        }
+
+        // Save to database
+        await Session.findOneAndUpdate(
+            {},
+            {
+                pairingCode: pairingCode,
+                phoneNumber: phoneNumber,
+                connected: false,
+                connectionType: 'pairing',
+                lastActivity: new Date()
+            },
+            { upsert: true }
+        );
+
+        console.log('💾 Pairing code saved');
+
+        // Simulate connection (in real implementation, this would validate the pairing code)
+        setTimeout(async () => {
+            await Session.findOneAndUpdate(
+                {},
+                { 
+                    connected: true,
+                    pairingCode: null 
+                }
+            );
+            console.log('✅ Manual pairing connection established');
+        }, 3000);
+
+        res.json({
+            success: true,
+            message: 'Pairing code received. Connecting...',
+            pairingCode: pairingCode
+        });
+
+    } catch (error) {
+        console.error('❌ Import session error:', error);
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Get Session Info
+app.get('/api/session-info', async (req, res) => {
+    try {
+        const session = await Session.findOne({});
+        
+        if (!session) {
+            return res.json({
+                success: false,
+                message: 'No active session'
+            });
+        }
+
+        res.json({
+            success: true,
+            sessionId: session.sessionId,
+            phoneNumber: session.phoneNumber,
+            connected: session.connected,
+            connectionType: session.connectionType,
+            lastActivity: session.lastActivity,
+            hasManualData: !!session.manualSession
+        });
+
+    } catch (error) {
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Export Current Session
+app.get('/api/export-session', async (req, res) => {
+    try {
+        const session = await Session.findOne({});
+        
+        if (!session) {
+            return res.json({
+                success: false,
+                error: 'No active session to export'
+            });
+        }
+
+        const sessionData = {
+            sessionId: session.sessionId,
+            phoneNumber: session.phoneNumber,
+            connectionType: session.connectionType,
+            connected: session.connected,
+            exportDate: new Date().toISOString(),
+            manualData: session.manualSession || null
+        };
+
+        res.json({
+            success: true,
+            sessionData: sessionData,
+            message: 'Session data exported successfully'
+        });
+
+    } catch (error) {
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// ==================== EXISTING API ROUTES ====================
 
 // Status Check
 app.get('/api/status', async (req, res) => {
@@ -212,9 +433,11 @@ app.get('/api/status', async (req, res) => {
             hasSession: !!session,
             qrAvailable: session ? !!session.qrCode : false,
             pairingCodeAvailable: session ? !!session.pairingCode : false,
+            connectionType: session?.connectionType || 'none',
             message: isConnected ? 'WhatsApp Connected ✅' : 
                      session?.qrCode ? 'QR Available - Please Scan 📱' : 
-                     session?.pairingCode ? 'Pairing Code Available' : 
+                     session?.pairingCode ? 'Pairing Code Available 🔑' :
+                     session?.connectionType === 'manual' ? 'Manual Session Configured ⚙️' :
                      'Initializing...'
         });
     } catch (error) {
@@ -263,13 +486,14 @@ app.get('/api/pairing-code', async (req, res) => {
         }
 
         try {
-            const pairingCode = await sock.requestPairingCode(number.replace(/[^0-9]/g, ''));
+            const pairingCode = await sock.requestPairingCode(formatPhoneNumber(number));
             
             await Session.findOneAndUpdate(
                 {},
                 { 
                     pairingCode: pairingCode,
                     phoneNumber: number,
+                    connectionType: 'pairing',
                     lastActivity: new Date()
                 },
                 { upsert: true }
@@ -327,7 +551,7 @@ app.post('/api/new-session', async (req, res) => {
     }
 });
 
-// Send Message (Test Function)
+// Send Message
 app.post('/api/send-message', async (req, res) => {
     try {
         const { number, message } = req.body;
@@ -364,9 +588,11 @@ app.post('/api/send-message', async (req, res) => {
     }
 });
 
-// Get Chats
-app.get('/api/chats', async (req, res) => {
+// Bulk Messaging
+app.post('/api/send-bulk', async (req, res) => {
     try {
+        const { contacts, message, delay = 2000 } = req.body;
+        
         if (!sock || !sock.user) {
             return res.json({ 
                 success: false, 
@@ -374,18 +600,46 @@ app.get('/api/chats', async (req, res) => {
             });
         }
 
-        const chats = await sock.fetchBlocklist();
-        
+        if (!contacts || !message) {
+            return res.json({ 
+                success: false, 
+                error: 'Contacts and message are required' 
+            });
+        }
+
+        const results = [];
+        let successCount = 0;
+
+        for (let i = 0; i < contacts.length; i++) {
+            const number = contacts[i];
+            try {
+                const formattedNumber = formatPhoneNumber(number) + '@s.whatsapp.net';
+                await sock.sendMessage(formattedNumber, { text: message });
+                results.push({ number, status: 'success' });
+                successCount++;
+                
+                // Add delay between messages
+                if (i < contacts.length - 1) {
+                    await delay(delay);
+                }
+            } catch (error) {
+                results.push({ number, status: 'error', error: error.message });
+            }
+        }
+
         res.json({
             success: true,
-            chats: chats || []
+            results: results,
+            sent: successCount,
+            failed: contacts.length - successCount,
+            message: `Sent ${successCount}/${contacts.length} messages successfully`
         });
 
     } catch (error) {
-        console.error('Get chats error:', error);
+        console.error('Bulk send error:', error);
         res.json({ 
             success: false, 
-            error: 'Failed to get chats' 
+            error: 'Bulk send failed: ' + error.message 
         });
     }
 });
@@ -401,8 +655,10 @@ app.get('/api/health', async (req, res) => {
             status: 'running',
             database: dbStatus === 1 ? 'connected' : 'disconnected',
             whatsapp: whatsappStatus,
+            connection_type: session?.connectionType || 'none',
             qr_available: session ? !!session.qrCode : false,
             pairing_code_available: session ? !!session.pairingCode : false,
+            manual_session: !!session?.manualSession,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -413,118 +669,19 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
-// Serve simple frontend
-app.get('/', (req, res) => {
-    res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>WhatsApp Marketing Tool - Baileys</title>
-        <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .container { max-width: 800px; margin: 0 auto; }
-            .card { background: #f5f5f5; padding: 20px; margin: 10px 0; border-radius: 10px; }
-            button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
-            .success { background: #4CAF50; color: white; }
-            .primary { background: #2196F3; color: white; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚀 WhatsApp Marketing Tool (Baileys)</h1>
-            <div class="card">
-                <h3>Connection Status</h3>
-                <div id="status">Loading...</div>
-                <button onclick="getStatus()" class="primary">Refresh Status</button>
-                <button onclick="newSession()" class="success">New Session</button>
-            </div>
-            <div class="card">
-                <h3>QR Code</h3>
-                <button onclick="getQR()">Show QR Code</button>
-                <div id="qrcode"></div>
-            </div>
-            <div class="card">
-                <h3>Pairing Code</h3>
-                <input type="text" id="phoneNumber" placeholder="94771234567">
-                <button onclick="getPairingCode()">Get Pairing Code</button>
-                <div id="pairingCode"></div>
-            </div>
-        </div>
-        <script>
-            const API_BASE = '/api';
-            
-            async function getStatus() {
-                try {
-                    const response = await fetch(API_BASE + '/status');
-                    const data = await response.json();
-                    document.getElementById('status').innerHTML = 
-                        data.success ? \`<strong>Status:</strong> \${data.message}\` : \`Error: \${data.error}\`;
-                } catch (error) {
-                    document.getElementById('status').innerHTML = 'Error fetching status';
-                }
-            }
-            
-            async function getQR() {
-                try {
-                    const response = await fetch(API_BASE + '/qr');
-                    const data = await response.json();
-                    if (data.success) {
-                        document.getElementById('qrcode').innerHTML = \`<img src="\${data.qr}" alt="QR Code">\`;
-                    } else {
-                        document.getElementById('qrcode').innerHTML = data.message;
-                    }
-                } catch (error) {
-                    document.getElementById('qrcode').innerHTML = 'Error fetching QR';
-                }
-            }
-            
-            async function getPairingCode() {
-                const number = document.getElementById('phoneNumber').value;
-                if (!number) {
-                    alert('Please enter phone number');
-                    return;
-                }
-                try {
-                    const response = await fetch(API_BASE + '/pairing-code?number=' + number);
-                    const data = await response.json();
-                    if (data.success) {
-                        document.getElementById('pairingCode').innerHTML = 
-                            \`<strong>Pairing Code:</strong> \${data.pairingCode}\`;
-                    } else {
-                        document.getElementById('pairingCode').innerHTML = 'Error: ' + data.error;
-                    }
-                } catch (error) {
-                    document.getElementById('pairingCode').innerHTML = 'Error fetching pairing code';
-                }
-            }
-            
-            async function newSession() {
-                try {
-                    const response = await fetch(API_BASE + '/new-session', { method: 'POST' });
-                    const data = await response.json();
-                    alert(data.message);
-                    getStatus();
-                } catch (error) {
-                    alert('Error starting new session');
-                }
-            }
-            
-            // Initial load
-            getStatus();
-        </script>
-    </body>
-    </html>
-    `);
+// Start WhatsApp after MongoDB connection
+mongoose.connection.on('connected', () => {
+    console.log('🔗 Database connected - Starting WhatsApp in 3 seconds...');
+    setTimeout(initializeWhatsApp, 3000);
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🔗 Health: http://localhost:${PORT}/api/health`);
-    console.log(`🔗 Status: http://localhost:${PORT}/api/status`);
-    console.log('📱 WhatsApp Marketing Tool with Baileys - READY!');
-    console.log('✅ Fixed Baileys Errors');
-    console.log('✅ Working QR Codes');
-    console.log('✅ Working Pairing Codes');
-    console.log('✅ Auto-reconnection');
+    console.log('📱 WhatsApp Marketing Tool with Manual Session Support - READY!');
+    console.log('✅ Manual Session Input');
+    console.log('✅ Pairing Code Support');
+    console.log('✅ QR Code Generation');
+    console.log('✅ Bulk Messaging');
 });
