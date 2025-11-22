@@ -10,7 +10,6 @@ const pino = require('pino');
 const { 
     default: makeWASocket, 
     useMultiFileAuthState, 
-    makeInMemoryStore,
     Browsers,
     DisconnectReason
 } = require('@whiskeysockets/baileys');
@@ -62,7 +61,6 @@ const Session = mongoose.model('Session', sessionSchema);
 // Global variables
 let sock = null;
 let isInitializing = false;
-const store = makeInMemoryStore({ });
 const SESSION_BASE_PATH = './sessions';
 
 // Ensure sessions directory exists
@@ -147,32 +145,28 @@ async function initializeWhatsApp(manualData = null) {
         } else {
             // Use multi-file auth state
             console.log('🔧 Using multi-file auth state');
-            const authState = await useMultiFileAuthState(sessionPath);
-            state = authState.state;
-            saveCredsFunction = authState.saveCreds;
+            const { state: authState, saveCreds } = await useMultiFileAuthState(sessionPath);
+            state = authState;
+            saveCredsFunction = saveCreds;
         }
 
         // Create socket with proper configuration
         sock = makeWASocket({
-            auth: {
-                creds: state.creds,
-                keys: state.keys,
-            },
-            printQRInTerminal: true, // Changed to true for debugging
-            logger: pino({ level: 'error' }),
+            auth: state,
+            printQRInTerminal: true,
+            logger: pino({ level: 'silent' }), // Reduced logging
             browser: Browsers.ubuntu('Chrome'),
-            markOnlineOnConnect: false, // Changed for better stability
+            markOnlineOnConnect: false, // Better for stability
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
+            connectTimeoutMs: 60000,
+            keepAliveIntervalMs: 10000,
         });
 
         // Store credentials updates
         if (saveCredsFunction) {
             sock.ev.on('creds.update', saveCredsFunction);
         }
-
-        // Bind store
-        store.bind(sock.ev);
 
         // Connection Handler
         sock.ev.on('connection.update', async (update) => {
@@ -204,13 +198,14 @@ async function initializeWhatsApp(manualData = null) {
             if (connection === 'open') {
                 console.log('🎉 WhatsApp CONNECTED!');
                 try {
+                    const userPhone = sock.user?.id ? sock.user.id.replace(/:\d+@/, '') : 'Unknown';
                     await Session.findOneAndUpdate(
                         {},
                         { 
                             connected: true, 
                             qrCode: null,
                             pairingCode: null,
-                            phoneNumber: sock.user?.id.replace(/:\d+@/, '') || 'Unknown',
+                            phoneNumber: userPhone,
                             lastActivity: new Date() 
                         },
                         { upsert: true, new: true }
@@ -240,6 +235,13 @@ async function initializeWhatsApp(manualData = null) {
                 isInitializing = false;
                 console.log('🔄 Attempting to reconnect in 10 seconds...');
                 setTimeout(() => initializeWhatsApp(), 10000);
+            }
+        });
+
+        // Message handler
+        sock.ev.on('messages.upsert', async (m) => {
+            if (m.messages && m.messages[0] && !m.messages[0].key.fromMe) {
+                console.log('📩 New message received');
             }
         });
 
@@ -375,20 +377,9 @@ app.post('/api/import-session', async (req, res) => {
 
         console.log('💾 Pairing code saved');
 
-        // For pairing codes, we need to use the proper Baileys method
-        if (sock && sock.requestPairingCode) {
-            try {
-                // This will trigger the pairing process
-                console.log('🔄 Initiating pairing process...');
-                // Note: In actual implementation, you would handle the pairing process properly
-            } catch (error) {
-                console.error('Pairing error:', error);
-            }
-        }
-
         res.json({
             success: true,
-            message: 'Pairing code received. Connecting...',
+            message: 'Pairing code received. Please use the pairing code endpoint to connect.',
             pairingCode: pairingCode
         });
 
@@ -476,7 +467,7 @@ app.get('/api/status', async (req, res) => {
         
         res.json({
             success: true,
-            connected: isConnected ? true : (session ? session.connected : false),
+            connected: isConnected,
             hasSession: !!session,
             qrAvailable: session ? !!session.qrCode : false,
             pairingCodeAvailable: session ? !!session.pairingCode : false,
