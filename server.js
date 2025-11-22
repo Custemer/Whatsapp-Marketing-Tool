@@ -7,15 +7,25 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
+
+// CORS Configuration
+app.use(cors({
+    origin: ["https://whatsapp-marketing-tool.vercel.app", "http://localhost:3000"],
+    credentials: true
+}));
+
+// Socket.io Configuration with CORS
 const io = socketIo(server, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+        origin: ["https://whatsapp-marketing-tool.vercel.app", "http://localhost:3000"],
+        methods: ["GET", "POST"],
+        credentials: true,
+        transports: ['websocket', 'polling']
+    },
+    allowEIO3: true
 });
 
 // Middleware
-app.use(cors());
 app.use(express.json());
 
 // WhatsApp Client
@@ -23,114 +33,146 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+        ]
     }
 });
 
 let isConnected = false;
 let qrCode = null;
+let connectedClients = new Set();
 
-// Socket.io Connection
+// Socket.io Connection with better handling
 io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
+    console.log('✅ Client connected:', socket.id);
+    connectedClients.add(socket.id);
+    
+    // Send current status immediately
+    socket.emit('status', { 
+        connected: isConnected, 
+        message: isConnected ? 'WhatsApp Connected' : 'WhatsApp Not Connected'
+    });
 
-    socket.emit('status', { connected: isConnected });
-
+    // Send QR code if exists
     if (qrCode) {
+        console.log('📤 Sending existing QR to client:', socket.id);
         socket.emit('qr', qrCode);
+        socket.emit('message', 'QR code available - please scan with WhatsApp');
     }
 
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+    socket.on('disconnect', (reason) => {
+        console.log('❌ Client disconnected:', socket.id, 'Reason:', reason);
+        connectedClients.delete(socket.id);
+    });
+
+    socket.on('error', (error) => {
+        console.error('❌ Socket error:', socket.id, error);
+    });
+
+    // Test event
+    socket.emit('welcome', { 
+        message: 'Connected to WhatsApp Marketing Server',
+        timestamp: new Date().toISOString()
     });
 });
 
 // WhatsApp Events
 client.on('qr', async (qr) => {
-    console.log('QR Code received');
-    qrCode = await qrcode.toDataURL(qr);
-    io.emit('qr', qrCode);
+    console.log('📱 QR Code received - Generating...');
+    try {
+        qrCode = await qrcode.toDataURL(qr);
+        console.log('✅ QR Code generated successfully');
+        console.log('📤 Broadcasting QR to', connectedClients.size, 'clients');
+        
+        // Broadcast to all connected clients
+        io.emit('qr', qrCode);
+        io.emit('message', 'QR code generated - please scan with WhatsApp');
+    } catch (error) {
+        console.error('❌ QR Code generation failed:', error);
+    }
 });
 
 client.on('ready', () => {
-    console.log('WhatsApp client is ready!');
+    console.log('✅ WhatsApp client is ready!');
     isConnected = true;
     qrCode = null;
-    io.emit('status', { connected: true });
-    io.emit('message', 'WhatsApp connected successfully!');
+    
+    io.emit('status', { 
+        connected: true, 
+        message: 'WhatsApp Connected - Ready to send messages!' 
+    });
+    io.emit('message', '✅ WhatsApp connected successfully!');
 });
 
-client.on('disconnected', () => {
-    console.log('WhatsApp client disconnected');
+client.on('authenticated', () => {
+    console.log('✅ WhatsApp authenticated');
+    io.emit('message', '🔐 WhatsApp authenticated successfully');
+});
+
+client.on('auth_failure', (msg) => {
+    console.error('❌ WhatsApp auth failure:', msg);
+    io.emit('message', '❌ WhatsApp authentication failed: ' + msg);
+});
+
+client.on('disconnected', (reason) => {
+    console.log('❌ WhatsApp disconnected:', reason);
     isConnected = false;
-    io.emit('status', { connected: false });
-    io.emit('message', 'WhatsApp disconnected');
+    io.emit('status', { 
+        connected: false, 
+        message: 'WhatsApp Disconnected: ' + reason 
+    });
+    io.emit('message', '❌ WhatsApp disconnected: ' + reason);
 });
 
-// API Routes
+// API Routes for testing
 app.get('/api/status', (req, res) => {
-    res.json({ connected: isConnected });
+    res.json({ 
+        success: true,
+        connected: isConnected, 
+        message: isConnected ? 'WhatsApp Connected' : 'WhatsApp Not Connected',
+        qrAvailable: !!qrCode,
+        connectedClients: connectedClients.size,
+        serverTime: new Date().toISOString()
+    });
 });
 
-app.post('/api/send-message', async (req, res) => {
-    if (!isConnected) {
-        return res.status(400).json({ error: 'WhatsApp not connected' });
-    }
-
-    const { number, message } = req.body;
-
-    try {
-        const chatId = number.substring(1) + '@c.us';
-        await client.sendMessage(chatId, message);
-        res.json({ success: true, message: 'Message sent successfully' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+app.get('/api/test', (req, res) => {
+    res.json({ 
+        success: true, 
+        message: 'WhatsApp Marketing Backend is working!',
+        version: '2.0',
+        timestamp: new Date().toISOString()
+    });
 });
 
-app.post('/api/send-bulk', async (req, res) => {
-    if (!isConnected) {
-        return res.status(400).json({ error: 'WhatsApp not connected' });
-    }
-
-    const { contacts, message, delay = 5000 } = req.body;
-
-    try {
-        const results = [];
-        
-        for (let i = 0; i < contacts.length; i++) {
-            const number = contacts[i];
-            
-            try {
-                const chatId = number.substring(1) + '@c.us';
-                await client.sendMessage(chatId, message);
-                results.push({ number, status: 'success' });
-                
-                // Emit progress
-                io.emit('progress', {
-                    current: i + 1,
-                    total: contacts.length,
-                    percentage: ((i + 1) / contacts.length) * 100
-                });
-                
-                // Delay between messages
-                if (i < contacts.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            } catch (error) {
-                results.push({ number, status: 'error', error: error.message });
-            }
-        }
-        
-        res.json({ success: true, results });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+app.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'healthy',
+        whatsapp: isConnected ? 'connected' : 'disconnected',
+        qr: qrCode ? 'available' : 'not available',
+        clients: connectedClients.size
+    });
 });
 
-// Start server
+// Initialize WhatsApp Client
+console.log('🚀 Initializing WhatsApp client...');
+client.initialize().catch(error => {
+    console.error('❌ WhatsApp initialization failed:', error);
+});
+
+// Start server - Render requires specific port binding
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    client.initialize();
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`🔗 Health check: https://whatsapp-marketing-backend.onrender.com/api/health`);
+    console.log(`🔗 Test endpoint: https://whatsapp-marketing-backend.onrender.com/api/test`);
+    console.log(`🔗 Status endpoint: https://whatsapp-marketing-backend.onrender.com/api/status`);
 });
