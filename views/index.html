@@ -145,10 +145,6 @@
       background: linear-gradient(135deg, #28a745, #1e7e34);
     }
 
-    .btn-danger {
-      background: linear-gradient(135deg, #dc3545, #c82333);
-    }
-
     .message-log {
       background: #f8f9fa;
       border-radius: 10px;
@@ -224,7 +220,7 @@
         <div id="bulkTab" class="tab-content">
           <div class="form-group">
             <label for="bulkNumbers">Phone Numbers (one per line):</label>
-            <textarea id="bulkNumbers" placeholder="94769424903\n94771234567\n94769874561" rows="6"></textarea>
+            <textarea id="bulkNumbers" placeholder="94769424903&#10;94771234567&#10;94769874561" rows="6"></textarea>
           </div>
           <div class="form-group">
             <label for="bulkMessage">Message:</label>
@@ -290,10 +286,10 @@
         
         if (data.connected) {
           statusCard.className = 'status-card status-connected';
-          statusText.textContent = '✅ WhatsApp Connected - ' + (data.phoneNumber || 'Ready to send messages');
+          statusText.textContent = 'WhatsApp Connected - ' + (data.phoneNumber || 'Ready to send messages');
         } else {
           statusCard.className = 'status-card status-disconnected';
-          statusText.textContent = '❌ WhatsApp Not Connected - Please connect using pairing code';
+          statusText.textContent = 'WhatsApp Not Connected - Please connect using pairing code';
         }
         
       } catch (error) {
@@ -310,7 +306,7 @@
       }
 
       try {
-        const response = await fetch(`/code?number=${phoneNumber}`);
+        const response = await fetch('/code?number=' + phoneNumber);
         const data = await response.json();
         
         if (data.code) {
@@ -404,7 +400,7 @@
         if (data.connected) {
           statsContent.innerHTML = `
             <div class="status-card status-connected">
-              <h4>✅ WhatsApp Connected</h4>
+              <h4>WhatsApp Connected</h4>
               <p>Phone Number: ${data.phoneNumber || 'N/A'}</p>
               <p>Last Activity: ${new Date(data.lastActivity).toLocaleString()}</p>
               <p>Total Messages: ${data.totalMessages}</p>
@@ -413,7 +409,7 @@
         } else {
           statsContent.innerHTML = `
             <div class="status-card status-disconnected">
-              <h4>❌ WhatsApp Not Connected</h4>
+              <h4>WhatsApp Not Connected</h4>
               <p>Please connect using the pairing code in the Connect tab</p>
             </div>
           `;
