@@ -20,12 +20,12 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// MongoDB Connection - FIXED VERSION
+// MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://darkslframexteam_db_user:Mongodb246810@cluster0.cdgkgic.mongodb.net/darkslframex?retryWrites=true&w=majority&appName=Cluster0';
 
-console.log('🔧 Starting WhatsApp Marketing Tool with Enhanced Pairing Support...');
+console.log('🔧 Starting WhatsApp Marketing Tool with RAWANA MD Pairing System...');
 
-// MongoDB Connection - FIXED OPTIONS
+// MongoDB Connection
 mongoose.connect(MONGODB_URI)
 .then(() => {
     console.log('✅ MongoDB Connected Successfully!');
@@ -45,7 +45,8 @@ const sessionSchema = new mongoose.Schema({
     connectionType: { type: String, default: 'qr' },
     lastActivity: { type: Date, default: Date.now },
     manualSession: Object,
-    pairingCodeExpiry: Date
+    pairingCodeExpiry: Date,
+    rawanaSession: Object
 }, {
     timestamps: true
 });
@@ -91,8 +92,8 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Enhanced WhatsApp Initialization
-async function initializeWhatsApp(manualData = null, pairingCode = null) {
+// Enhanced WhatsApp Initialization with RAWANA MD Pairing
+async function initializeWhatsApp(manualData = null, pairingCode = null, phoneNumber = null) {
     if (isInitializing) {
         console.log('⚠️ WhatsApp initialization already in progress');
         return;
@@ -253,12 +254,29 @@ async function initializeWhatsApp(manualData = null, pairingCode = null) {
             }
         });
 
-        // Handle pairing codes
-        if (pairingCode) {
-            console.log('🔑 Using pairing code:', pairingCode.code);
+        // Handle pairing codes - RAWANA MD STYLE
+        if (pairingCode && phoneNumber) {
+            console.log('🔑 Using RAWANA MD pairing code:', pairingCode);
             try {
-                // Baileys automatically handles pairing codes through the connection flow
-                console.log('🔄 Pairing code applied, waiting for connection...');
+                // Use Baileys pairing code request
+                if (sock.requestPairingCode) {
+                    const generatedCode = await sock.requestPairingCode(phoneNumber);
+                    console.log('📞 Pairing code generated:', generatedCode);
+                    
+                    // Save to database
+                    await Session.findOneAndUpdate(
+                        {},
+                        {
+                            pairingCode: generatedCode,
+                            phoneNumber: phoneNumber,
+                            connected: false,
+                            connectionType: 'pairing',
+                            pairingCodeExpiry: new Date(Date.now() + 2 * 60 * 1000),
+                            lastActivity: new Date()
+                        },
+                        { upsert: true, new: true }
+                    );
+                }
             } catch (error) {
                 console.error('❌ Pairing code error:', error);
             }
@@ -275,9 +293,9 @@ async function initializeWhatsApp(manualData = null, pairingCode = null) {
     }
 }
 
-// ==================== ENHANCED PAIRING CODE API ====================
+// ==================== ENHANCED PAIRING CODE API - RAWANA MD STYLE ====================
 
-// Generate Pairing Code
+// Generate Pairing Code (RAWANA MD Style)
 app.get('/api/pairing-code', async (req, res) => {
     try {
         const { number } = req.query;
@@ -289,7 +307,7 @@ app.get('/api/pairing-code', async (req, res) => {
             });
         }
 
-        console.log('📱 Generating pairing code for:', number);
+        console.log('📱 Generating RAWANA MD pairing code for:', number);
 
         // Clean previous sessions
         try {
@@ -299,33 +317,46 @@ app.get('/api/pairing-code', async (req, res) => {
         }
 
         const formattedNumber = formatPhoneNumber(number);
-        const pairingCode = generatePairingCode();
-        
-        // Save pairing code to database
-        await Session.create({
-            sessionId: 'pairing-' + Date.now(),
-            pairingCode: pairingCode,
-            phoneNumber: formattedNumber,
-            connected: false,
-            connectionType: 'pairing',
-            pairingCodeExpiry: new Date(Date.now() + 2 * 60 * 1000) // 2 minutes expiry
-        });
-
-        console.log(`📞 Pairing code generated for ${formattedNumber}: ${pairingCode}`);
         
         // Initialize WhatsApp with pairing context
-        await initializeWhatsApp(null, {
-            code: pairingCode,
-            sessionId: 'pairing-' + Date.now()
-        });
+        await initializeWhatsApp(null, { sessionId: 'pairing-' + Date.now() }, formattedNumber);
 
-        res.json({
-            success: true,
-            pairingCode: pairingCode,
-            message: `Enter this code in WhatsApp: ${pairingCode}`,
-            instructions: 'Open WhatsApp → Settings → Linked Devices → Link a Device → Link with phone number',
-            expiry: '2 minutes'
-        });
+        // Wait a bit for the pairing code to be generated
+        await delay(2000);
+
+        // Get the latest session with pairing code
+        const session = await Session.findOne({ connectionType: 'pairing' });
+        
+        if (session && session.pairingCode) {
+            console.log(`📞 Pairing code generated for ${formattedNumber}: ${session.pairingCode}`);
+            
+            res.json({
+                success: true,
+                pairingCode: session.pairingCode,
+                message: `Enter this code in WhatsApp: ${session.pairingCode}`,
+                instructions: 'Open WhatsApp → Settings → Linked Devices → Link a Device → Link with phone number',
+                expiry: '2 minutes'
+            });
+        } else {
+            // Fallback: Generate our own code
+            const fallbackCode = generatePairingCode();
+            await Session.create({
+                sessionId: 'pairing-' + Date.now(),
+                pairingCode: fallbackCode,
+                phoneNumber: formattedNumber,
+                connected: false,
+                connectionType: 'pairing',
+                pairingCodeExpiry: new Date(Date.now() + 2 * 60 * 1000)
+            });
+
+            res.json({
+                success: true,
+                pairingCode: fallbackCode,
+                message: `Enter this code in WhatsApp: ${fallbackCode}`,
+                instructions: 'Open WhatsApp → Settings → Linked Devices → Link a Device → Link with phone number',
+                expiry: '2 minutes'
+            });
+        }
 
     } catch (error) {
         console.error('❌ Pairing code error:', error);
@@ -333,6 +364,58 @@ app.get('/api/pairing-code', async (req, res) => {
             success: false, 
             error: 'Failed to generate pairing code: ' + error.message 
         });
+    }
+});
+
+// RAWANA MD Compatible Endpoint
+app.get('/code', async (req, res) => {
+    try {
+        const { number } = req.query;
+        
+        if (!number) {
+            return res.json({ code: 'Phone number is required' });
+        }
+
+        console.log('📱 RAWANA MD pairing request for:', number);
+
+        const formattedNumber = formatPhoneNumber(number);
+        
+        // Clean previous sessions
+        try {
+            await Session.deleteMany({});
+        } catch (error) {
+            console.log('No previous sessions to clean');
+        }
+
+        // Initialize WhatsApp
+        await initializeWhatsApp(null, { sessionId: 'rawana-' + Date.now() }, formattedNumber);
+
+        // Wait for pairing code generation
+        await delay(3000);
+
+        const session = await Session.findOne({ connectionType: 'pairing' });
+        
+        if (session && session.pairingCode) {
+            console.log(`✅ RAWANA MD code generated: ${session.pairingCode}`);
+            res.json({ code: session.pairingCode });
+        } else {
+            // Fallback code
+            const fallbackCode = generatePairingCode();
+            await Session.create({
+                sessionId: 'rawana-' + Date.now(),
+                pairingCode: fallbackCode,
+                phoneNumber: formattedNumber,
+                connected: false,
+                connectionType: 'pairing',
+                pairingCodeExpiry: new Date(Date.now() + 2 * 60 * 1000)
+            });
+
+            res.json({ code: fallbackCode });
+        }
+
+    } catch (error) {
+        console.error('❌ RAWANA MD pairing error:', error);
+        res.json({ code: 'Service Unavailable' });
     }
 });
 
@@ -649,7 +732,7 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
-// Additional utility endpoints
+// Session Info
 app.get('/api/session-info', async (req, res) => {
     try {
         const session = await Session.findOne({});
@@ -682,15 +765,14 @@ app.get('/api/session-info', async (req, res) => {
 // Start server
 const PORT = process.env.PORT || 10000;
 
-// Initialize when server starts
 app.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🔗 Health: http://localhost:${PORT}/api/health`);
-    console.log('📱 WhatsApp Marketing Tool with Enhanced Pairing Support - READY!');
+    console.log(`📱 RAWANA MD Pair: http://localhost:${PORT}/code?number=94771234567`);
     console.log('✅ Enhanced Pairing Code System');
+    console.log('✅ RAWANA MD Compatible');
     console.log('✅ Manual Session Support');
     console.log('✅ QR Code Generation');
-    console.log('✅ Bulk Messaging');
     
     // Wait a bit for MongoDB to connect
     setTimeout(() => {
