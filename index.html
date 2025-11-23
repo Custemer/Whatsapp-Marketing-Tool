@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Marketing Tool</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+      color: #333;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #25D366, #128C7E);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+    }
+
+    .content {
+      padding: 30px;
+    }
+
+    .status-card {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-left: 4px solid #007bff;
+    }
+
+    .status-connected {
+      border-left-color: #28a745;
+      background: #d4edda;
+    }
+
+    .status-disconnected {
+      border-left-color: #dc3545;
+      background: #f8d7da;
+    }
+
+    .tab-container {
+      margin-top: 20px;
+    }
+
+    .tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e9ecef;
+    }
+
+    .tab {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin-right: 5px;
+      border-radius: 8px 8px 0 0;
+      font-size: 16px;
+      transition: all 0.3s;
+    }
+
+    .tab.active {
+      background: #007bff;
+      color: white;
+    }
+
+    .tab-content {
+      display: none;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 0 0 10px 10px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .form-group input, .form-group textarea {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e9ecef;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+
+    .form-group input:focus, .form-group textarea:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, #007bff, #0056b3);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 5px;
+      transition: all 0.3s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #28a745, #1e7e34);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #dc3545, #c82333);
+    }
+
+    .message-log {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      padding: 8px;
+      border-bottom: 1px solid #dee2e6;
+      font-family: monospace;
+    }
+
+    .result-box {
+      background: #e9ecef;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 10px 0;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>WhatsApp Marketing Tool</h1>
+      <p>Connect and manage your WhatsApp business messages</p>
+    </div>
+    
+    <div class="content">
+      <div id="statusCard" class="status-card">
+        <h3>Connection Status</h3>
+        <p id="statusText">Checking status...</p>
+      </div>
+
+      <div class="tab-container">
+        <div class="tabs">
+          <button class="tab active" onclick="openTab('connectTab')">Connect WhatsApp</button>
+          <button class="tab" onclick="openTab('messageTab')">Send Message</button>
+          <button class="tab" onclick="openTab('bulkTab')">Bulk Messages</button>
+          <button class="tab" onclick="openTab('statsTab')">Statistics</button>
+        </div>
+
+        <div id="connectTab" class="tab-content active">
+          <div class="form-group">
+            <label for="phoneNumber">WhatsApp Phone Number (with country code):</label>
+            <input type="text" id="phoneNumber" placeholder="94769424903" class="input-field">
+          </div>
+          <button class="btn btn-success" onclick="getPairingCode()">Get Pairing Code</button>
+          
+          <div id="pairingResult" class="result-box" style="display: none; margin-top: 20px;">
+            <h4>Your Pairing Code:</h4>
+            <p id="pairingCode" style="font-size: 24px; font-weight: bold; color: #25D366;"></p>
+            <p>Open WhatsApp → Settings → Linked Devices → Link a Device → Link with phone number</p>
+            <p>Enter this code to connect your WhatsApp account</p>
+          </div>
+        </div>
+
+        <div id="messageTab" class="tab-content">
+          <div class="form-group">
+            <label for="singleNumber">Phone Number:</label>
+            <input type="text" id="singleNumber" placeholder="94769424903">
+          </div>
+          <div class="form-group">
+            <label for="singleMessage">Message:</label>
+            <textarea id="singleMessage" placeholder="Type your message here..." rows="4"></textarea>
+          </div>
+          <button class="btn btn-success" onclick="sendSingleMessage()">Send Message</button>
+        </div>
+
+        <div id="bulkTab" class="tab-content">
+          <div class="form-group">
+            <label for="bulkNumbers">Phone Numbers (one per line):</label>
+            <textarea id="bulkNumbers" placeholder="94769424903\n94771234567\n94769874561" rows="6"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="bulkMessage">Message:</label>
+            <textarea id="bulkMessage" placeholder="Type your bulk message here..." rows="4"></textarea>
+          </div>
+          <button class="btn btn-success" onclick="sendBulkMessages()">Send Bulk Messages</button>
+        </div>
+
+        <div id="statsTab" class="tab-content">
+          <div id="statsContent">
+            <p>Loading statistics...</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="message-log">
+        <h4>Activity Log</h4>
+        <div id="logContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function logMessage(message) {
+      const logContainer = document.getElementById('logContainer');
+      const logEntry = document.createElement('div');
+      logEntry.className = 'log-entry';
+      logEntry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+      logContainer.appendChild(logEntry);
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function openTab(tabName) {
+      // Hide all tab contents
+      const tabContents = document.getElementsByClassName('tab-content');
+      for (let i = 0; i < tabContents.length; i++) {
+        tabContents[i].classList.remove('active');
+      }
+
+      // Remove active class from all tabs
+      const tabs = document.getElementsByClassName('tab');
+      for (let i = 0; i < tabs.length; i++) {
+        tabs[i].classList.remove('active');
+      }
+
+      // Show the specific tab content
+      document.getElementById(tabName).classList.add('active');
+      event.currentTarget.classList.add('active');
+
+      // Load stats if stats tab is opened
+      if (tabName === 'statsTab') {
+        loadStats();
+      }
+    }
+
+    async function checkStatus() {
+      try {
+        const response = await fetch('/code/status');
+        const data = await response.json();
+        
+        const statusCard = document.getElementById('statusCard');
+        const statusText = document.getElementById('statusText');
+        
+        if (data.connected) {
+          statusCard.className = 'status-card status-connected';
+          statusText.textContent = '✅ WhatsApp Connected - ' + (data.phoneNumber || 'Ready to send messages');
+        } else {
+          statusCard.className = 'status-card status-disconnected';
+          statusText.textContent = '❌ WhatsApp Not Connected - Please connect using pairing code';
+        }
+        
+      } catch (error) {
+        logMessage('Error checking status: ' + error.message);
+      }
+    }
+
+    async function getPairingCode() {
+      const phoneNumber = document.getElementById('phoneNumber').value;
+      
+      if (!phoneNumber) {
+        alert('Please enter your WhatsApp phone number');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/code?number=${phoneNumber}`);
+        const data = await response.json();
+        
+        if (data.code) {
+          document.getElementById('pairingCode').textContent = data.code;
+          document.getElementById('pairingResult').style.display = 'block';
+          logMessage('Pairing code generated: ' + data.code);
+        } else {
+          logMessage('Error generating pairing code');
+        }
+      } catch (error) {
+        logMessage('Error: ' + error.message);
+      }
+    }
+
+    async function sendSingleMessage() {
+      const number = document.getElementById('singleNumber').value;
+      const message = document.getElementById('singleMessage').value;
+      
+      if (!number || !message) {
+        alert('Please enter both number and message');
+        return;
+      }
+      
+      try {
+        const response = await fetch('/api/send-message', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            number: number,
+            message: message
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          logMessage('Message sent to ' + number);
+        } else {
+          logMessage('Send failed: ' + data.error);
+        }
+      } catch (error) {
+        logMessage('Network error: ' + error.message);
+      }
+    }
+
+    async function sendBulkMessages() {
+      const numbersText = document.getElementById('bulkNumbers').value;
+      const message = document.getElementById('bulkMessage').value;
+      
+      if (!numbersText || !message) {
+        alert('Please enter both numbers and message');
+        return;
+      }
+      
+      const contacts = numbersText.split('\n').filter(num => num.trim() !== '');
+      
+      try {
+        const response = await fetch('/api/send-bulk', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contacts: contacts,
+            message: message,
+            delayMs: 2000
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          logMessage('Bulk messages sent: ' + data.sent + '/' + contacts.length + ' successful');
+        } else {
+          logMessage('Bulk send failed: ' + data.error);
+        }
+      } catch (error) {
+        logMessage('Network error: ' + error.message);
+      }
+    }
+
+    async function loadStats() {
+      try {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+        
+        const statsContent = document.getElementById('statsContent');
+        
+        if (data.connected) {
+          statsContent.innerHTML = `
+            <div class="status-card status-connected">
+              <h4>✅ WhatsApp Connected</h4>
+              <p>Phone Number: ${data.phoneNumber || 'N/A'}</p>
+              <p>Last Activity: ${new Date(data.lastActivity).toLocaleString()}</p>
+              <p>Total Messages: ${data.totalMessages}</p>
+            </div>
+          `;
+        } else {
+          statsContent.innerHTML = `
+            <div class="status-card status-disconnected">
+              <h4>❌ WhatsApp Not Connected</h4>
+              <p>Please connect using the pairing code in the Connect tab</p>
+            </div>
+          `;
+        }
+      } catch (error) {
+        logMessage('Error loading stats: ' + error.message);
+      }
+    }
+
+    // Start checking status every 5 seconds
+    setInterval(checkStatus, 5000);
+    checkStatus();
+
+    // Initial log
+    logMessage('WhatsApp Marketing Tool Started');
+  </script>
+</body>
+</html>
