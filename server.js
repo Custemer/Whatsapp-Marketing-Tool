@@ -20,16 +20,13 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// MongoDB Connection
+// MongoDB Connection - FIXED VERSION
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://darkslframexteam_db_user:Mongodb246810@cluster0.cdgkgic.mongodb.net/darkslframex?retryWrites=true&w=majority&appName=Cluster0';
 
 console.log('🔧 Starting WhatsApp Marketing Tool with Enhanced Pairing Support...');
 
-// MongoDB Connection
-mongoose.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
+// MongoDB Connection - FIXED OPTIONS
+mongoose.connect(MONGODB_URI)
 .then(() => {
     console.log('✅ MongoDB Connected Successfully!');
 })
@@ -49,6 +46,8 @@ const sessionSchema = new mongoose.Schema({
     lastActivity: { type: Date, default: Date.now },
     manualSession: Object,
     pairingCodeExpiry: Date
+}, {
+    timestamps: true
 });
 
 const Session = mongoose.model('Session', sessionSchema);
@@ -377,6 +376,80 @@ app.get('/api/pairing-status', async (req, res) => {
     }
 });
 
+// ==================== MANUAL SESSION API ====================
+
+app.post('/api/manual-session', async (req, res) => {
+    try {
+        const { 
+            sessionId, 
+            sessionToken, 
+            clientId, 
+            serverToken, 
+            encKey, 
+            macKey,
+            phoneNumber 
+        } = req.body;
+
+        console.log('📱 Manual session connection request');
+
+        if (!sessionId) {
+            return res.json({
+                success: false,
+                error: 'Session ID is required'
+            });
+        }
+
+        // Save manual session data
+        await Session.findOneAndUpdate(
+            {},
+            {
+                sessionId: sessionId,
+                connected: false,
+                connectionType: 'manual',
+                phoneNumber: phoneNumber,
+                lastActivity: new Date(),
+                manualSession: {
+                    sessionId: sessionId,
+                    sessionToken: sessionToken,
+                    clientId: clientId,
+                    serverToken: serverToken,
+                    encKey: encKey,
+                    macKey: macKey
+                }
+            },
+            { upsert: true, new: true }
+        );
+
+        console.log('💾 Manual session data saved');
+
+        // Initialize with manual data
+        const manualData = {
+            sessionId: sessionId,
+            creds: {
+                me: { 
+                    id: (phoneNumber ? formatPhoneNumber(phoneNumber) : 'manual') + '@s.whatsapp.net',
+                    name: 'Manual Session User'
+                }
+            }
+        };
+
+        await initializeWhatsApp(manualData);
+
+        res.json({
+            success: true,
+            message: 'Manual session data received. Trying to connect...',
+            sessionId: sessionId
+        });
+
+    } catch (error) {
+        console.error('❌ Manual session error:', error);
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 // ==================== EXISTING API ROUTES ====================
 
 // Status Check
@@ -576,16 +649,41 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
-// Start WhatsApp after MongoDB connection
-mongoose.connection.on('connected', () => {
-    console.log('🔗 Database connected - Starting WhatsApp in 3 seconds...');
-    setTimeout(() => {
-        initializeWhatsApp();
-    }, 3000);
+// Additional utility endpoints
+app.get('/api/session-info', async (req, res) => {
+    try {
+        const session = await Session.findOne({});
+        
+        if (!session) {
+            return res.json({
+                success: false,
+                message: 'No active session'
+            });
+        }
+
+        res.json({
+            success: true,
+            sessionId: session.sessionId,
+            phoneNumber: session.phoneNumber,
+            connected: session.connected,
+            connectionType: session.connectionType,
+            lastActivity: session.lastActivity,
+            hasManualData: !!session.manualSession
+        });
+
+    } catch (error) {
+        res.json({
+            success: false,
+            error: error.message
+        });
+    }
 });
 
+// Start server
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
+
+// Initialize when server starts
+app.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🔗 Health: http://localhost:${PORT}/api/health`);
     console.log('📱 WhatsApp Marketing Tool with Enhanced Pairing Support - READY!');
@@ -593,4 +691,9 @@ app.listen(PORT, () => {
     console.log('✅ Manual Session Support');
     console.log('✅ QR Code Generation');
     console.log('✅ Bulk Messaging');
+    
+    // Wait a bit for MongoDB to connect
+    setTimeout(() => {
+        initializeWhatsApp();
+    }, 2000);
 });
