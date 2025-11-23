@@ -15,6 +15,7 @@
             --danger: #E53E3E;
             --warning: #DD6B20;
             --success: #38A169;
+            --info: #3182CE;
         }
 
         * {
@@ -254,6 +255,11 @@
             color: white;
         }
 
+        .btn-info {
+            background: var(--info);
+            color: white;
+        }
+
         /* Stats Grid */
         .stats-grid {
             display: grid;
@@ -380,6 +386,55 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* Tabs */
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #E2E8F0;
+        }
+
+        .tab-button {
+            padding: 12px 25px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-button.active {
+            border-bottom-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Category Badges */
+        .category-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 2px;
+        }
+
+        /* Filter Section */
+        .filter-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 2px solid #E2E8F0;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
         /* Responsive */
         @media (max-width: 1024px) {
             .main-grid {
@@ -394,6 +449,16 @@
                 order: 1;
             }
         }
+
+        /* Category Colors */
+        .category-color-1 { background: #FF6B6B; color: white; }
+        .category-color-2 { background: #4ECDC4; color: white; }
+        .category-color-3 { background: #45B7D1; color: white; }
+        .category-color-4 { background: #96CEB4; color: white; }
+        .category-color-5 { background: #FFEAA7; color: #333; }
+        .category-color-6 { background: #DDA0DD; color: white; }
+        .category-color-7 { background: #98D8C8; color: white; }
+        .category-color-8 { background: #F7DC6F; color: #333; }
     </style>
 </head>
 <body>
@@ -426,6 +491,9 @@
                     </button>
                     <button class="nav-tab" onclick="openTab('numberDetection')">
                         <i class="fas fa-search"></i>Number Detection
+                    </button>
+                    <button class="nav-tab" onclick="openTab('categories')">
+                        <i class="fas fa-tags"></i>Categories & Filters
                     </button>
                     <button class="nav-tab" onclick="openTab('contacts')">
                         <i class="fas fa-address-book"></i>Contact Management
@@ -503,38 +571,156 @@
 
                 <!-- Bulk Messaging Tab -->
                 <div id="bulkMessage" class="tab-content">
-                    <div class="card">
-                        <h3><i class="fas fa-users"></i>Bulk Messaging</h3>
-                        <div class="form-group">
-                            <label>Phone Numbers (one per line):</label>
-                            <textarea id="bulkNumbers" class="form-control" placeholder="94769424903&#10;94771234567&#10;94769874561" rows="6"></textarea>
+                    <div class="tab-buttons">
+                        <button class="tab-button active" onclick="openBulkTab('manual')">Manual Numbers</button>
+                        <button class="tab-button" onclick="openBulkTab('category')">By Category</button>
+                        <button class="tab-button" onclick="openBulkTab('filter')">By Filter</button>
+                    </div>
+
+                    <!-- Manual Numbers Tab -->
+                    <div id="bulkManual" class="bulk-tab active">
+                        <div class="card">
+                            <h3><i class="fas fa-users"></i>Bulk Messaging - Manual Numbers</h3>
+                            <div class="form-group">
+                                <label>Phone Numbers (one per line):</label>
+                                <textarea id="bulkNumbers" class="form-control" placeholder="94769424903&#10;94771234567&#10;94769874561" rows="6"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Message:</label>
+                                <textarea id="bulkMessageText" class="form-control" placeholder="Type your bulk message here..." rows="4"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Upload Images (Multiple):</label>
+                                <input type="file" id="bulkImages" class="form-control" accept="image/*" multiple>
+                            </div>
+                            <div class="form-group">
+                                <label>Delay between messages (ms):</label>
+                                <input type="number" id="bulkDelay" class="form-control" value="2000" min="1000">
+                            </div>
+                            <button class="btn btn-primary" onclick="sendBulkMessages()">
+                                <i class="fas fa-rocket"></i>Send Bulk Messages
+                            </button>
                         </div>
-                        <div class="form-group">
-                            <label>Message:</label>
-                            <textarea id="bulkMessageText" class="form-control" placeholder="Type your bulk message here..." rows="4"></textarea>
+                    </div>
+
+                    <!-- Category-based Tab -->
+                    <div id="bulkCategory" class="bulk-tab">
+                        <div class="card">
+                            <h3><i class="fas fa-tags"></i>Bulk Messaging - By Category</h3>
+                            <div class="form-group">
+                                <label>Select Category:</label>
+                                <select id="categorySelect" class="form-control">
+                                    <option value="">Loading categories...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Message:</label>
+                                <textarea id="categoryMessage" class="form-control" placeholder="Type your message here..." rows="4"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Personalize Messages:</label>
+                                <input type="checkbox" id="personalizeCategory" checked>
+                                <small style="margin-left: 10px;">Use contact names and details</small>
+                            </div>
+                            <div class="form-group">
+                                <label>Delay between messages (ms):</label>
+                                <input type="number" id="categoryDelay" class="form-control" value="2000" min="1000">
+                            </div>
+                            <button class="btn btn-primary" onclick="sendCategoryMessages()">
+                                <i class="fas fa-paper-plane"></i>Send to Category
+                            </button>
                         </div>
-                        <div class="form-group">
-                            <label>Upload Images (Multiple):</label>
-                            <input type="file" id="bulkImages" class="form-control" accept="image/*" multiple>
+                    </div>
+
+                    <!-- Filter-based Tab -->
+                    <div id="bulkFilter" class="bulk-tab">
+                        <div class="card">
+                            <h3><i class="fas fa-filter"></i>Bulk Messaging - By Filter</h3>
+                            <div class="filter-section">
+                                <h4>Filter Contacts</h4>
+                                <div class="filter-row">
+                                    <div>
+                                        <label>Business Type:</label>
+                                        <input type="text" id="filterBusiness" class="form-control" placeholder="e.g., Restaurant, Retail">
+                                    </div>
+                                    <div>
+                                        <label>Location:</label>
+                                        <input type="text" id="filterLocation" class="form-control" placeholder="e.g., Colombo, Kandy">
+                                    </div>
+                                    <div>
+                                        <label>Status:</label>
+                                        <select id="filterStatus" class="form-control">
+                                            <option value="">All</option>
+                                            <option value="active">Active</option>
+                                            <option value="inactive">Inactive</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="filter-row">
+                                    <div>
+                                        <label>Min Messages:</label>
+                                        <input type="number" id="filterMinMessages" class="form-control" placeholder="0">
+                                    </div>
+                                    <div>
+                                        <label>Max Messages:</label>
+                                        <input type="number" id="filterMaxMessages" class="form-control" placeholder="1000">
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary" onclick="previewFilteredContacts()">
+                                    <i class="fas fa-eye"></i>Preview Contacts
+                                </button>
+                            </div>
+                            <div class="form-group">
+                                <label>Message:</label>
+                                <textarea id="filterMessage" class="form-control" placeholder="Type your message here..." rows="4"></textarea>
+                            </div>
+                            <button class="btn btn-primary" onclick="sendFilteredMessages()">
+                                <i class="fas fa-paper-plane"></i>Send to Filtered Contacts
+                            </button>
                         </div>
-                        <div class="form-group">
-                            <label>Delay between messages (ms):</label>
-                            <input type="number" id="bulkDelay" class="form-control" value="2000" min="1000">
-                        </div>
-                        <button class="btn btn-primary" onclick="sendBulkMessages()">
-                            <i class="fas fa-rocket"></i>Send Bulk Messages
-                        </button>
                     </div>
                 </div>
 
                 <!-- Number Detection Tab -->
                 <div id="numberDetection" class="tab-content">
                     <div class="card">
-                        <h3><i class="fas fa-search"></i>Active Number Detection</h3>
+                        <h3><i class="fas fa-search"></i>Advanced Number Detection</h3>
+                        
                         <div class="form-group">
                             <label>Phone Numbers to Check (one per line):</label>
                             <textarea id="detectionNumbers" class="form-control" placeholder="94769424903&#10;94771234567&#10;94769874561" rows="6"></textarea>
                         </div>
+
+                        <div class="form-group">
+                            <label>Or Upload File (TXT/CSV):</label>
+                            <div class="file-upload" onclick="document.getElementById('fileUpload').click()">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Click to upload file with numbers</p>
+                                <input type="file" id="fileUpload" style="display: none;" accept=".txt,.csv">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Auto Categorization:</label>
+                            <input type="checkbox" id="autoCategorize" checked>
+                            <small style="margin-left: 10px;">Automatically categorize detected numbers</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Category Name:</label>
+                            <input type="text" id="detectionCategory" class="form-control" placeholder="Detected Contacts" value="Detected Contacts">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Business Type (Optional):</label>
+                            <input type="text" id="detectionBusiness" class="form-control" placeholder="e.g., Retail, Service">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Location (Optional):</label>
+                            <input type="text" id="detectionLocation" class="form-control" placeholder="e.g., Colombo">
+                        </div>
+
                         <button class="btn btn-success" onclick="detectActiveNumbers()">
                             <i class="fas fa-search"></i>Detect Active Numbers
                         </button>
@@ -543,13 +729,52 @@
                     <div id="detectionResults"></div>
                 </div>
 
+                <!-- Categories & Filters Tab -->
+                <div id="categories" class="tab-content">
+                    <div class="card">
+                        <h3><i class="fas fa-tags"></i>Manage Categories</h3>
+                        
+                        <div class="form-group">
+                            <div class="filter-row">
+                                <input type="text" id="categoryName" class="form-control" placeholder="Category Name">
+                                <input type="text" id="categoryDescription" class="form-control" placeholder="Description">
+                                <input type="color" id="categoryColor" class="form-control" value="#25D366">
+                            </div>
+                            <button class="btn btn-primary" onclick="createCategory()">
+                                <i class="fas fa-plus"></i>Create Category
+                            </button>
+                        </div>
+
+                        <div id="categoriesList" class="results-container">
+                            Loading categories...
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3><i class="fas fa-filter"></i>Category Filters</h3>
+                        <div id="categoryFilters">
+                            Select a category to manage filters...
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Contacts Tab -->
                 <div id="contacts" class="tab-content">
                     <div class="card">
                         <h3><i class="fas fa-address-book"></i>Contact Management</h3>
-                        <div class="form-group">
+                        
+                        <div class="filter-row">
                             <input type="text" id="contactSearch" class="form-control" placeholder="Search contacts...">
+                            <select id="contactCategoryFilter" class="form-control">
+                                <option value="">All Categories</option>
+                            </select>
+                            <select id="contactStatusFilter" class="form-control">
+                                <option value="">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
                         </div>
+
                         <div class="results-container" id="contactsList">
                             Loading contacts...
                         </div>
@@ -578,9 +803,16 @@
                     </div>
 
                     <div class="card">
-                        <h3><i class="fas fa-chart-line"></i>Performance Analytics</h3>
-                        <div id="analyticsContent">
-                            Analytics data will appear here...
+                        <h3><i class="fas fa-chart-line"></i>Detection Analytics</h3>
+                        <div id="detectionAnalytics">
+                            Loading detection analytics...
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3><i class="fas fa-chart-pie"></i>Category Distribution</h3>
+                        <div id="categoryAnalytics">
+                            Loading category analytics...
                         </div>
                     </div>
                 </div>
@@ -608,6 +840,7 @@
     <script>
         // Global variables
         let statusCheckInterval;
+        let categories = [];
 
         // Utility functions
         function logMessage(message, type = 'info') {
@@ -653,7 +886,24 @@
                 loadAnalytics();
             } else if (tabName === 'contacts') {
                 loadContacts();
+            } else if (tabName === 'categories') {
+                loadCategories();
+            } else if (tabName === 'bulkMessage') {
+                loadCategoriesForSelect();
             }
+        }
+
+        // Bulk messaging sub-tabs
+        function openBulkTab(tabName) {
+            document.querySelectorAll('.bulk-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            document.getElementById('bulk' + tabName.charAt(0).toUpperCase() + tabName.slice(1)).classList.add('active');
+            event.currentTarget.classList.add('active');
         }
 
         // WhatsApp Connection Functions
@@ -818,9 +1068,54 @@
             }
         }
 
+        // Category-based messaging
+        async function sendCategoryMessages() {
+            const categoryId = document.getElementById('categorySelect').value;
+            const message = document.getElementById('categoryMessage').value;
+            const personalization = document.getElementById('personalizeCategory').checked;
+            const delayMs = document.getElementById('categoryDelay').value;
+            
+            if (!categoryId || !message) {
+                alert('Please select a category and enter message');
+                return;
+            }
+            
+            try {
+                showLoading('Sending messages to category...');
+                const response = await fetch('/api/advanced/category-bulk', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        categoryId: categoryId,
+                        message: message,
+                        personalization: personalization,
+                        delayMs: delayMs
+                    })
+                });
+                
+                const data = await response.json();
+                hideLoading();
+                
+                if (data.success) {
+                    logMessage(`✅ Category messages sent: ${data.sent}/${data.totalContacts} to ${data.category}`);
+                } else {
+                    logMessage('❌ Category send failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                hideLoading();
+                logMessage('❌ Network error: ' + error.message, 'error');
+            }
+        }
+
         // Number Detection Functions
         async function detectActiveNumbers() {
             const numbersText = document.getElementById('detectionNumbers').value;
+            const autoCategorize = document.getElementById('autoCategorize').checked;
+            const categoryName = document.getElementById('detectionCategory').value;
+            const businessType = document.getElementById('detectionBusiness').value;
+            const location = document.getElementById('detectionLocation').value;
             
             if (!numbersText) {
                 alert('Please enter phone numbers to detect');
@@ -837,7 +1132,11 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        numbers: numbers
+                        numbers: numbers,
+                        autoCategorize: autoCategorize,
+                        categoryName: categoryName,
+                        businessType: businessType,
+                        location: location
                     })
                 });
                 
@@ -851,11 +1150,15 @@
                             <h4>Detection Results</h4>
                             <p><strong>Total:</strong> ${data.total} | <strong>Active:</strong> ${data.active} | <strong>Inactive:</strong> ${data.inactive}</p>
                             <p><strong>Active Percentage:</strong> ${data.activePercentage}%</p>
+                            ${data.category ? `<p><strong>Category Created:</strong> ${data.category.name} (${data.category.contactCount} contacts)</p>` : ''}
                         </div>
                         <div class="results-container">
                             ${data.results.map(result => `
                                 <div class="result-item ${result.status === 'active' ? 'result-success' : 'result-error'}">
-                                    <span>${result.number}</span>
+                                    <div>
+                                        <strong>${result.number}</strong>
+                                        ${result.profileName ? ` - ${result.profileName}` : ''}
+                                    </div>
                                     <span>${result.status}</span>
                                 </div>
                             `).join('')}
@@ -863,6 +1166,11 @@
                     `;
                     
                     logMessage(`✅ Number detection completed: ${data.active}/${data.total} active numbers found`);
+                    
+                    // Refresh categories if any were created
+                    if (data.category) {
+                        loadCategories();
+                    }
                 } else {
                     logMessage('❌ Detection failed: ' + data.error, 'error');
                 }
@@ -872,39 +1180,205 @@
             }
         }
 
+        // Category Management
+        async function loadCategories() {
+            try {
+                showLoading('Loading categories...');
+                const response = await fetch('/api/categories');
+                const data = await response.json();
+                hideLoading();
+                
+                categories = data.categories || [];
+                
+                const categoriesList = document.getElementById('categoriesList');
+                if (data.success && categories.length > 0) {
+                    categoriesList.innerHTML = categories.map(category => `
+                        <div class="result-item">
+                            <div>
+                                <span class="category-badge" style="background: ${category.color}; color: white;">
+                                    ${category.name}
+                                </span>
+                                <small>${category.description || 'No description'}</small>
+                            </div>
+                            <div>
+                                <span>${category.contactCount} contacts</span>
+                                <button class="btn btn-info btn-sm" onclick="viewCategory('${category._id}')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteCategory('${category._id}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    categoriesList.innerHTML = '<div class="result-item">No categories found. Create your first category!</div>';
+                }
+                
+                // Also update category filter in contacts tab
+                updateCategoryFilter();
+                
+            } catch (error) {
+                hideLoading();
+                logMessage('❌ Categories load error: ' + error.message, 'error');
+            }
+        }
+
+        async function loadCategoriesForSelect() {
+            try {
+                const response = await fetch('/api/categories');
+                const data = await response.json();
+                
+                if (data.success && data.categories) {
+                    const categorySelect = document.getElementById('categorySelect');
+                    categorySelect.innerHTML = '<option value="">Select Category</option>' + 
+                        data.categories.map(cat => 
+                            `<option value="${cat._id}">${cat.name} (${cat.contactCount} contacts)</option>`
+                        ).join('');
+                }
+            } catch (error) {
+                console.error('Error loading categories for select:', error);
+            }
+        }
+
+        async function createCategory() {
+            const name = document.getElementById('categoryName').value;
+            const description = document.getElementById('categoryDescription').value;
+            const color = document.getElementById('categoryColor').value;
+            
+            if (!name) {
+                alert('Please enter category name');
+                return;
+            }
+            
+            try {
+                showLoading('Creating category...');
+                const response = await fetch('/api/categories', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        description: description,
+                        color: color
+                    })
+                });
+                
+                const data = await response.json();
+                hideLoading();
+                
+                if (data.success) {
+                    logMessage(`✅ Category "${name}" created successfully`);
+                    document.getElementById('categoryName').value = '';
+                    document.getElementById('categoryDescription').value = '';
+                    loadCategories();
+                } else {
+                    logMessage('❌ Category creation failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                hideLoading();
+                logMessage('❌ Network error: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteCategory(categoryId) {
+            if (!confirm('Are you sure you want to delete this category? This will not delete the contacts.')) {
+                return;
+            }
+            
+            try {
+                showLoading('Deleting category...');
+                const response = await fetch(`/api/categories/${categoryId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                hideLoading();
+                
+                if (data.success) {
+                    logMessage('✅ Category deleted successfully');
+                    loadCategories();
+                } else {
+                    logMessage('❌ Category deletion failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                hideLoading();
+                logMessage('❌ Network error: ' + error.message, 'error');
+            }
+        }
+
+        function updateCategoryFilter() {
+            const categoryFilter = document.getElementById('contactCategoryFilter');
+            categoryFilter.innerHTML = '<option value="">All Categories</option>' + 
+                categories.map(cat => 
+                    `<option value="${cat._id}">${cat.name}</option>`
+                ).join('');
+        }
+
         // Analytics and Contacts
         async function loadAnalytics() {
             try {
                 showLoading('Loading analytics...');
-                const response = await fetch('/api/detection/stats');
-                const data = await response.json();
+                
+                // Load basic stats
+                const statsResponse = await fetch('/api/detection/stats');
+                const statsData = await statsResponse.json();
+                
+                // Load detection analytics
+                const detectionResponse = await fetch('/api/detection/analytics');
+                const detectionData = await detectionResponse.json();
+                
                 hideLoading();
                 
-                document.getElementById('totalMessages').textContent = data.totalContacts || '0';
-                document.getElementById('activeContacts').textContent = data.activeContacts || '0';
-                document.getElementById('successRate').textContent = '95%';
-                document.getElementById('totalContacts').textContent = data.totalContacts || '0';
+                // Update basic stats
+                document.getElementById('totalMessages').textContent = statsData.totalContacts || '0';
+                document.getElementById('activeContacts').textContent = statsData.activeContacts || '0';
+                document.getElementById('successRate').textContent = detectionData.detectionSuccessRate || '0%';
+                document.getElementById('totalContacts').textContent = statsData.totalContacts || '0';
                 
-                // Update analytics content
-                const analyticsContent = document.getElementById('analyticsContent');
-                analyticsContent.innerHTML = `
+                // Update detection analytics
+                const detectionAnalytics = document.getElementById('detectionAnalytics');
+                detectionAnalytics.innerHTML = `
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-number">${data.totalContacts || 0}</div>
-                            <div class="stat-label">Total Contacts</div>
+                            <div class="stat-number">${detectionData.activeContacts || 0}</div>
+                            <div class="stat-label">Active on WhatsApp</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-number">${data.activeContacts || 0}</div>
-                            <div class="stat-label">Active Contacts</div>
+                            <div class="stat-number">${detectionData.inactiveContacts || 0}</div>
+                            <div class="stat-label">Not on WhatsApp</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-number">${data.inactiveContacts || 0}</div>
-                            <div class="stat-label">Inactive Contacts</div>
+                            <div class="stat-number">${detectionData.detectionSuccessRate || '0%'}</div>
+                            <div class="stat-label">Detection Rate</div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-number">${Math.floor(Math.random() * 50) + 50}%</div>
-                            <div class="stat-label">Success Rate</div>
-                        </div>
+                    </div>
+                    <div class="results-container">
+                        <h4>Recent Detections</h4>
+                        ${(detectionData.detectionHistory || []).map(contact => `
+                            <div class="result-item">
+                                <div>${contact.phoneNumber}</div>
+                                <div>${new Date(contact.createdAt).toLocaleDateString()}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                // Update category analytics
+                const categoryAnalytics = document.getElementById('categoryAnalytics');
+                categoryAnalytics.innerHTML = `
+                    <div class="results-container">
+                        ${categories.map((cat, index) => `
+                            <div class="result-item">
+                                <div>
+                                    <span class="category-badge category-color-${(index % 8) + 1}">
+                                        ${cat.name}
+                                    </span>
+                                </div>
+                                <div>${cat.contactCount} contacts</div>
+                            </div>
+                        `).join('')}
                     </div>
                 `;
                 
@@ -917,7 +1391,23 @@
         async function loadContacts() {
             try {
                 showLoading('Loading contacts...');
-                const response = await fetch('/api/contacts');
+                
+                const search = document.getElementById('contactSearch').value;
+                const category = document.getElementById('contactCategoryFilter').value;
+                const status = document.getElementById('contactStatusFilter').value;
+                
+                let url = '/api/contacts';
+                const params = new URLSearchParams();
+                
+                if (search) params.append('search', search);
+                if (category) params.append('category', category);
+                if (status) params.append('status', status);
+                
+                if (params.toString()) {
+                    url += '?' + params.toString();
+                }
+                
+                const response = await fetch(url);
                 const data = await response.json();
                 hideLoading();
                 
@@ -929,8 +1419,14 @@
                                 <strong>${contact.phoneNumber}</strong>
                                 ${contact.name ? ` - ${contact.name}` : ''}
                                 ${contact.location ? ` (${contact.location})` : ''}
+                                ${contact.businessType ? ` - ${contact.businessType}` : ''}
+                                <br>
+                                <small>
+                                    Messages: ${contact.messageCount || 0} | 
+                                    Status: <span class="${contact.status === 'active' ? 'result-success' : 'result-error'}">${contact.status}</span>
+                                    ${contact.whatsappStatus?.isOnWhatsApp ? '| ✅ WhatsApp' : ''}
+                                </small>
                             </div>
-                            <div>Messages: ${contact.messageCount || 0}</div>
                         </div>
                     `).join('');
                 } else {
@@ -943,11 +1439,32 @@
             }
         }
 
+        // File upload handler
+        document.getElementById('fileUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('detectionNumbers').value = e.target.result;
+                    logMessage(`📁 File "${file.name}" loaded successfully`);
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Search and filter handlers
+        document.getElementById('contactSearch').addEventListener('input', loadContacts);
+        document.getElementById('contactCategoryFilter').addEventListener('change', loadContacts);
+        document.getElementById('contactStatusFilter').addEventListener('change', loadContacts);
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', function() {
             // Start status checking
             statusCheckInterval = setInterval(checkStatus, 5000);
             checkStatus();
+            
+            // Load initial data
+            loadCategories();
             
             // Initial log
             logMessage('🚀 WhatsApp Marketing Pro Started');
