@@ -8,35 +8,10 @@ const {
   makeCacheableSignalKeyStore,
   Browsers,
 } = require("@whiskeysockets/baileys");
-const mongoose = require('mongoose');
+
+const Session = require("./models/Session");
 
 let router = express.Router();
-
-// MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://darkslframexteam_db_user:Mongodb246810@cluster0.cdgkgic.mongodb.net/darkslframex?retryWrites=true&w=majority&appName=Cluster0';
-
-mongoose.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
-.then(() => {
-    console.log('MongoDB Connected for WhatsApp Tool');
-})
-.catch((error) => {
-    console.error('MongoDB Connection Failed:', error.message);
-});
-
-// Session Schema
-const sessionSchema = new mongoose.Schema({
-    sessionId: String,
-    phoneNumber: String,
-    connected: { type: Boolean, default: false },
-    pairingCode: String,
-    lastActivity: { type: Date, default: Date.now },
-    userData: Object
-});
-
-const Session = mongoose.model('Session', sessionSchema);
 
 // Global variables to manage WhatsApp connection
 let whatsappClient = null;
@@ -186,4 +161,8 @@ router.get("/status", async (req, res) => {
     }
 });
 
-module.exports = router;
+// Export whatsappClient for use in other files
+module.exports = {
+    router,
+    whatsappClient: () => whatsappClient
+};
