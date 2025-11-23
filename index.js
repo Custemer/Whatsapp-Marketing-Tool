@@ -11,17 +11,19 @@ connectDB();
 require("events").EventEmitter.defaultMaxListeners = 500;
 
 // Middleware
-app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Import routes
-const pairRoute = require("./routes/pair");
-const messageRoute = require("./routes/message");
+const pairRouter = require("./routes/pair");
+const messageRouter = require("./routes/message");
 
 // Use routes
-app.use("/code", pairRoute);
-app.use("/api", messageRoute);
+app.use("/code", pairRouter);
+app.use("/api", messageRouter);
+
+// Serve static files
+app.use(express.static(path.join(__dirname, 'views')));
 
 // Root route to serve the main page
 app.get("/", (req, res) => {
