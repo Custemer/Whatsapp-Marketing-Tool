@@ -36,7 +36,7 @@ function formatPhoneNumber(number) {
 // Initialize WhatsApp Connection
 async function initializeWhatsApp() {
     if (isConnecting) {
-        console.log('WhatsApp connection already in progress');
+        console.log('⚠️ WhatsApp connection already in progress');
         return;
     }
 
@@ -65,7 +65,7 @@ async function initializeWhatsApp() {
             const { connection, lastDisconnect } = update;
 
             if (connection === "open") {
-                console.log('WhatsApp CONNECTED SUCCESSFULLY!');
+                console.log('✅ WhatsApp CONNECTED SUCCESSFULLY!');
                 isConnecting = false;
                 
                 // Update database
@@ -80,7 +80,7 @@ async function initializeWhatsApp() {
                 );
                 
             } else if (connection === "close") {
-                console.log('WhatsApp connection closed');
+                console.log('📵 WhatsApp connection closed');
                 isConnecting = false;
                 
                 if (lastDisconnect?.error?.output?.statusCode !== 401) {
@@ -91,11 +91,42 @@ async function initializeWhatsApp() {
         });
 
     } catch (error) {
-        console.error('WhatsApp initialization error:', error);
+        console.error('❌ WhatsApp initialization error:', error);
         isConnecting = false;
         setTimeout(() => initializeWhatsApp(), 10000);
     }
 }
+
+// Disconnect WhatsApp
+router.post("/disconnect", async (req, res) => {
+    try {
+        if (whatsappClient) {
+            await whatsappClient.logout();
+            whatsappClient = null;
+        }
+        
+        // Remove session files
+        if (fs.existsSync("./whatsapp-session")) {
+            fs.rmSync("./whatsapp-session", { recursive: true, force: true });
+        }
+        
+        // Update database
+        await Session.findOneAndUpdate(
+            {},
+            {
+                connected: false,
+                pairingCode: null,
+                lastActivity: new Date()
+            },
+            { upsert: true, new: true }
+        );
+        
+        res.json({ success: true, message: "WhatsApp disconnected successfully" });
+    } catch (error) {
+        console.error('Disconnect error:', error);
+        res.json({ success: false, error: error.message });
+    }
+});
 
 // Pairing Code Endpoint
 router.get("/", async (req, res) => {
@@ -134,11 +165,11 @@ router.get("/", async (req, res) => {
             { upsert: true, new: true }
         );
 
-        console.log(`Pairing code generated for ${num}: ${pairingCode}`);
+        console.log(`📞 Pairing code generated for ${num}: ${pairingCode}`);
         res.send({ code: pairingCode });
 
     } catch (error) {
-        console.error('Pairing code error:', error);
+        console.error('❌ Pairing code error:', error);
         res.send({ code: "Error generating pairing code" });
     }
 });
@@ -154,7 +185,8 @@ router.get("/status", async (req, res) => {
             hasSession: !!session,
             phoneNumber: session?.phoneNumber,
             pairingCode: session?.pairingCode,
-            lastActivity: session?.lastActivity
+            lastActivity: session?.lastActivity,
+            stats: session?.stats
         });
     } catch (error) {
         res.json({ error: error.message });
