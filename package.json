@@ -7,13 +7,13 @@
         "start": "node server.js"
     },
     "dependencies": {
-        "express": "^4.18.2",
+        "express": "latest",
         "@whiskeysockets/baileys": "github:canove/whaileys",
-        "qrcode": "^1.5.3",
-        "cors": "^2.8.5",
-        "mongoose": "^7.4.0",
-        "fs-extra": "^11.1.1",
-        "pino": "^8.15.0"
+        "qrcode": "latest",
+        "cors": "latest",
+        "mongoose": "latest",
+        "fs-extra": "latest",
+        "pino": "latest"
     },
     "engines": {
         "node": ">=16.0.0"
