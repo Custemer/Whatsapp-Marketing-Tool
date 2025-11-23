@@ -27,7 +27,7 @@ app.use(express.static('public'));
 // MongoDB Connection for Render
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://darkslframexteam_db_user:Mongodb246810@cluster0.cdgkgic.mongodb.net/darkslframex?retryWrites=true&w=majority&appName=Cluster0';
 
-console.log('🔧 Starting WhatsApp Marketing Tool on Render...');
+console.log('Starting WhatsApp Marketing Tool on Render...');
 
 // MongoDB Connection
 mongoose.connect(MONGODB_URI, {
@@ -35,10 +35,10 @@ mongoose.connect(MONGODB_URI, {
     useUnifiedTopology: true,
 })
 .then(() => {
-    console.log('✅ MongoDB Connected Successfully!');
+    console.log('MongoDB Connected Successfully!');
 })
 .catch((error) => {
-    console.error('❌ MongoDB Connection Failed:', error.message);
+    console.error('MongoDB Connection Failed:', error.message);
 });
 
 // Session Schema
@@ -97,13 +97,13 @@ const getBrowserConfig = () => {
 // Initialize WhatsApp
 async function initializeWhatsApp() {
     if (isInitializing) {
-        console.log('⚠️ WhatsApp initialization already in progress');
+        console.log('WhatsApp initialization already in progress');
         return;
     }
 
     try {
         isInitializing = true;
-        console.log('🔄 Initializing WhatsApp on Render...');
+        console.log('Initializing WhatsApp on Render...');
 
         const sessionId = 'baileys-session-' + Date.now();
         const sessionPath = path.join(SESSION_BASE_PATH, sessionId);
@@ -111,7 +111,7 @@ async function initializeWhatsApp() {
         const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
         
         const browserConfig = getBrowserConfig();
-        console.log('🔧 Using browser config for Render');
+        console.log('Using browser config for Render');
 
         sock = makeWASocket({
             auth: state,
@@ -131,10 +131,10 @@ async function initializeWhatsApp() {
         sock.ev.on('connection.update', async (update) => {
             const { connection, qr, lastDisconnect } = update;
             
-            console.log('🔗 Connection update:', connection);
+            console.log('Connection update:', connection);
 
             if (qr) {
-                console.log('📱 QR Code received');
+                console.log('QR Code received');
                 try {
                     const qrData = await qrcode.toDataURL(qr);
                     
@@ -149,14 +149,14 @@ async function initializeWhatsApp() {
                         },
                         { upsert: true, new: true }
                     );
-                    console.log('💾 QR code saved');
+                    console.log('QR code saved');
                 } catch (error) {
-                    console.error('❌ QR save error:', error);
+                    console.error('QR save error:', error);
                 }
             }
 
             if (connection === 'open') {
-                console.log('🎉 WhatsApp CONNECTED SUCCESSFULLY!');
+                console.log('WhatsApp CONNECTED SUCCESSFULLY!');
                 try {
                     const userPhone = sock.user?.id ? sock.user.id.split(':')[0] : 'Unknown';
                     await Session.findOneAndUpdate(
@@ -170,19 +170,19 @@ async function initializeWhatsApp() {
                         },
                         { upsert: true, new: true }
                     );
-                    console.log('✅ Database updated: CONNECTED');
+                    console.log('Database updated: CONNECTED');
                     isInitializing = false;
                 } catch (error) {
-                    console.error('❌ Database update error:', error);
+                    console.error('Database update error:', error);
                 }
             }
 
             if (connection === 'close') {
-                console.log('📵 Connection closed');
+                console.log('Connection closed');
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 
                 if (statusCode === DisconnectReason.loggedOut) {
-                    console.log('❌ Device logged out, clearing session...');
+                    console.log('Device logged out, clearing session...');
                     try {
                         await fs.remove(sessionPath);
                     } catch (error) {
@@ -192,18 +192,18 @@ async function initializeWhatsApp() {
                 }
                 
                 isInitializing = false;
-                console.log('🔄 Attempting to reconnect in 10 seconds...');
+                console.log('Attempting to reconnect in 10 seconds...');
                 setTimeout(() => initializeWhatsApp(), 10000);
             }
         });
 
-        console.log('🚀 WhatsApp client initialization started on Render');
+        console.log('WhatsApp client initialization started on Render');
 
     } catch (error) {
-        console.error('❌ WhatsApp initialization error:', error);
+        console.error('WhatsApp initialization error:', error);
         isInitializing = false;
         
-        console.log('🔄 Retrying initialization in 5 seconds...');
+        console.log('Retrying initialization in 5 seconds...');
         setTimeout(() => initializeWhatsApp(), 5000);
     }
 }
@@ -283,7 +283,7 @@ app.get('/', (req, res) => {
                 font-weight: bold;
                 color: #333;
             }
-            .form-group input {
+            .form-group input, .form-group textarea {
                 width: 100%;
                 padding: 12px;
                 border: 2px solid #e9ecef;
@@ -291,7 +291,7 @@ app.get('/', (req, res) => {
                 font-size: 16px;
                 transition: border-color 0.3s;
             }
-            .form-group input:focus {
+            .form-group input:focus, .form-group textarea:focus {
                 outline: none;
                 border-color: #007bff;
             }
@@ -358,7 +358,7 @@ app.get('/', (req, res) => {
     <body>
         <div class="container">
             <div class="header">
-                <h1>📱 WhatsApp Marketing Tool</h1>
+                <h1>WhatsApp Marketing Tool</h1>
                 <p>Connect and manage your WhatsApp business messages</p>
             </div>
             
@@ -387,7 +387,7 @@ app.get('/', (req, res) => {
                     <div id="qrContainer" class="qr-container" style="display: none;">
                         <h3>Scan QR Code</h3>
                         <img id="qrImage" src="" alt="QR Code" style="max-width: 300px;">
-                        <p>Open WhatsApp → Settings → Linked Devices → Scan QR Code</p>
+                        <p>Open WhatsApp -> Settings -> Linked Devices -> Scan QR Code</p>
                     </div>
 
                     <div id="pairingContainer" style="display: none;">
@@ -476,7 +476,7 @@ app.get('/', (req, res) => {
                     
                     if (data.connected) {
                         statusCard.className = 'status-card status-connected';
-                        logMessage('✅ WhatsApp Connected');
+                        logMessage('WhatsApp Connected');
                     } else {
                         statusCard.className = 'status-card status-disconnected';
                         
@@ -486,7 +486,7 @@ app.get('/', (req, res) => {
                     }
                     
                 } catch (error) {
-                    logMessage('❌ Error checking status: ' + error.message);
+                    logMessage('Error checking status: ' + error.message);
                 }
             }
 
@@ -499,12 +499,12 @@ app.get('/', (req, res) => {
                         document.getElementById('qrImage').src = data.qr;
                         document.getElementById('qrContainer').style.display = 'block';
                         document.getElementById('pairingContainer').style.display = 'none';
-                        logMessage('📱 QR Code loaded - Please scan');
+                        logMessage('QR Code loaded - Please scan');
                     } else {
-                        logMessage('⏳ QR code generating...');
+                        logMessage('QR code generating...');
                     }
                 } catch (error) {
-                    logMessage('❌ Error getting QR code: ' + error.message);
+                    logMessage('Error getting QR code: ' + error.message);
                 }
             }
 
@@ -537,13 +537,13 @@ app.get('/', (req, res) => {
                     const data = await response.json();
                     
                     if (data.success) {
-                        logMessage('✅ Pairing code submitted: ' + pairingCode);
+                        logMessage('Pairing code submitted: ' + pairingCode);
                         document.getElementById('pairingContainer').style.display = 'none';
                     } else {
-                        logMessage('❌ Pairing error: ' + data.error);
+                        logMessage('Pairing error: ' + data.error);
                     }
                 } catch (error) {
-                    logMessage('❌ Network error: ' + error.message);
+                    logMessage('Network error: ' + error.message);
                 }
             }
 
@@ -559,12 +559,12 @@ app.get('/', (req, res) => {
                     const data = await response.json();
                     
                     if (data.success) {
-                        logMessage('🆕 New session started');
+                        logMessage('New session started');
                         document.getElementById('qrContainer').style.display = 'none';
                         document.getElementById('pairingContainer').style.display = 'none';
                     }
                 } catch (error) {
-                    logMessage('❌ Error starting new session');
+                    logMessage('Error starting new session');
                 }
             }
 
@@ -592,12 +592,12 @@ app.get('/', (req, res) => {
                     const data = await response.json();
                     
                     if (data.success) {
-                        logMessage('✅ Message sent to ' + number);
+                        logMessage('Message sent to ' + number);
                     } else {
-                        logMessage('❌ Send failed: ' + data.error);
+                        logMessage('Send failed: ' + data.error);
                     }
                 } catch (error) {
-                    logMessage('❌ Network error: ' + error.message);
+                    logMessage('Network error: ' + error.message);
                 }
             }
 
@@ -610,7 +610,7 @@ app.get('/', (req, res) => {
                     return;
                 }
                 
-                const contacts = numbersText.split('\n').filter(num => num.trim() !== '');
+                const contacts = numbersText.split('\\n').filter(num => num.trim() !== '');
                 
                 try {
                     const response = await fetch('/api/send-bulk', {
@@ -628,12 +628,12 @@ app.get('/', (req, res) => {
                     const data = await response.json();
                     
                     if (data.success) {
-                        logMessage(`✅ Bulk messages sent: ${data.sent}/${contacts.length} successful`);
+                        logMessage('Bulk messages sent: ' + data.sent + '/' + contacts.length + ' successful');
                     } else {
-                        logMessage('❌ Bulk send failed: ' + data.error);
+                        logMessage('Bulk send failed: ' + data.error);
                     }
                 } catch (error) {
-                    logMessage('❌ Network error: ' + error.message);
+                    logMessage('Network error: ' + error.message);
                 }
             }
 
@@ -642,7 +642,7 @@ app.get('/', (req, res) => {
             checkStatus();
 
             // Initial log
-            logMessage('🚀 WhatsApp Marketing Tool Started');
+            logMessage('WhatsApp Marketing Tool Started');
         </script>
     </body>
     </html>
@@ -650,14 +650,12 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// ==================== API ROUTES ====================
-
 // Simple Pairing Code Input
 app.post('/api/input-pairing', async (req, res) => {
     try {
         const { pairingCode, phoneNumber } = req.body;
 
-        console.log('📱 Manual pairing input received:', { pairingCode, phoneNumber });
+        console.log('Manual pairing input received:', { pairingCode, phoneNumber });
 
         if (!pairingCode || !phoneNumber) {
             return res.json({
@@ -679,7 +677,7 @@ app.post('/api/input-pairing', async (req, res) => {
             { upsert: true, new: true }
         );
 
-        console.log('💾 Pairing code saved to database');
+        console.log('Pairing code saved to database');
 
         await initializeWhatsApp();
 
@@ -690,7 +688,7 @@ app.post('/api/input-pairing', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('❌ Manual pairing input error:', error);
+        console.error('Manual pairing input error:', error);
         res.json({
             success: false,
             error: 'Failed to process pairing code: ' + error.message
@@ -710,9 +708,9 @@ app.get('/api/status', async (req, res) => {
             hasSession: !!session,
             qrAvailable: session ? !!session.qrCode : false,
             pairingCodeAvailable: session ? !!session.pairingCode : false,
-            message: isConnected ? 'WhatsApp Connected ✅' : 
-                     session?.qrCode ? 'QR Available - Please Scan 📱' : 
-                     session?.pairingCode ? 'Pairing Code Available 🔑' :
+            message: isConnected ? 'WhatsApp Connected' : 
+                     session?.qrCode ? 'QR Available - Please Scan' : 
+                     session?.pairingCode ? 'Pairing Code Available' :
                      'Initializing...'
         });
     } catch (error) {
@@ -744,7 +742,7 @@ app.get('/api/qr', async (req, res) => {
 // New Session
 app.post('/api/new-session', async (req, res) => {
     try {
-        console.log('🆕 User requested new session');
+        console.log('User requested new session');
         
         try {
             const files = await fs.readdir(SESSION_BASE_PATH);
@@ -850,7 +848,7 @@ app.post('/api/send-bulk', async (req, res) => {
             results: results,
             sent: successCount,
             failed: contacts.length - successCount,
-            message: `Sent ${successCount}/${contacts.length} messages successfully`
+            message: 'Sent ' + successCount + '/' + contacts.length + ' messages successfully'
         });
 
     } catch (error) {
@@ -885,13 +883,13 @@ app.get('/api/health', async (req, res) => {
 
 // Start WhatsApp after MongoDB connection
 mongoose.connection.on('connected', () => {
-    console.log('🔗 Database connected - Starting WhatsApp in 3 seconds...');
+    console.log('Database connected - Starting WhatsApp in 3 seconds...');
     setTimeout(initializeWhatsApp, 3000);
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🌐 Open: http://localhost:${PORT}`);
-    console.log('📱 WhatsApp Marketing Tool - READY for Render!');
+    console.log('Server running on port ' + PORT);
+    console.log('Open: http://localhost:' + PORT);
+    console.log('WhatsApp Marketing Tool - READY for Render!');
 });
