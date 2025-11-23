@@ -1,20 +1,31 @@
 {
     "name": "whatsapp-marketing-baileys",
-    "version": "2.0.0",
-    "description": "WhatsApp Marketing Tool with Manual Session Support",
+    "version": "3.1.0",
+    "description": "WhatsApp Marketing Tool with RAWANA MD Pairing System",
     "main": "server.js",
     "scripts": {
-        "start": "node server.js"
+        "start": "node server.js",
+        "dev": "nodemon server.js"
     },
     "dependencies": {
-        "express": "latest",
+        "express": "^4.18.2",
         "@whiskeysockets/baileys": "github:canove/whaileys",
-        "qrcode": "latest",
-        "cors": "latest",
+        "qrcode": "^1.5.3",
+        "cors": "^2.8.5",
         "mongoose": "^7.5.0",
-        "fs-extra": "latest",
-        "pino": "latest"
+        "fs-extra": "^11.1.1",
+        "pino": "^8.15.0"
     },
+    "keywords": [
+        "whatsapp",
+        "marketing",
+        "automation",
+        "baileys",
+        "pairing-code",
+        "rawana-md"
+    ],
+    "author": "Your Name",
+    "license": "MIT",
     "engines": {
         "node": ">=16.0.0"
     }
