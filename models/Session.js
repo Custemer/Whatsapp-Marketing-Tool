@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 
-// Session Schema
 const sessionSchema = new mongoose.Schema({
     sessionId: String,
     phoneNumber: String,
@@ -8,8 +7,12 @@ const sessionSchema = new mongoose.Schema({
     pairingCode: String,
     lastActivity: { type: Date, default: Date.now },
     userData: Object,
-    messageCount: { type: Number, default: 0 }
+    stats: {
+        totalMessages: { type: Number, default: 0 },
+        totalContacts: { type: Number, default: 0 },
+        totalCampaigns: { type: Number, default: 0 },
+        successRate: { type: Number, default: 0 }
+    }
 });
 
-// Export the model
 module.exports = mongoose.model('Session', sessionSchema);
