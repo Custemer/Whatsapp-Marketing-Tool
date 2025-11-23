@@ -16,16 +16,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Import routes
-const pairRoute = require("./pair");
-const messageRoute = require("./message");
+const pairRoute = require("./routes/pair");
+const messageRoute = require("./routes/message");
 
 // Use routes
 app.use("/code", pairRoute);
 app.use("/api", messageRoute);
 
 // Root route to serve the main page
-app.use("/", (req, res, next) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "views", "index.html"));
 });
 
 // Start the server
