@@ -3,6 +3,10 @@ const app = express();
 const path = require("path");
 const PORT = process.env.PORT || 8000;
 
+// Database connection
+const connectDB = require("./config/database");
+connectDB();
+
 // Set maximum listeners for EventEmitter
 require("events").EventEmitter.defaultMaxListeners = 500;
 
