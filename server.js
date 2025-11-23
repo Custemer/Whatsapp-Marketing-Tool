@@ -16,24 +16,18 @@ const {
 
 const app = express();
 
-// Simple CORS configuration - CORS error solve කරන්න
-app.use(cors({
-    origin: true, // සියලුම origins allow කරන්න
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
-
-// Handle preflight requests
-app.options('*', cors());
-
+// Simple CORS for Render
+app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// MongoDB Connection
+// Serve static files from public directory
+app.use(express.static('public'));
+
+// MongoDB Connection for Render
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://darkslframexteam_db_user:Mongodb246810@cluster0.cdgkgic.mongodb.net/darkslframex?retryWrites=true&w=majority&appName=Cluster0';
 
-console.log('🔧 Starting WhatsApp Marketing Tool with Manual Session Support...');
+console.log('🔧 Starting WhatsApp Marketing Tool on Render...');
 
 // MongoDB Connection
 mongoose.connect(MONGODB_URI, {
@@ -47,7 +41,7 @@ mongoose.connect(MONGODB_URI, {
     console.error('❌ MongoDB Connection Failed:', error.message);
 });
 
-// Enhanced Session Schema
+// Session Schema
 const sessionSchema = new mongoose.Schema({
     sessionId: String,
     sessionData: Object,
@@ -56,15 +50,7 @@ const sessionSchema = new mongoose.Schema({
     phoneNumber: String,
     connected: { type: Boolean, default: false },
     connectionType: { type: String, default: 'qr' },
-    lastActivity: { type: Date, default: Date.now },
-    manualSession: {
-        sessionId: String,
-        sessionToken: String,
-        clientId: String,
-        serverToken: String,
-        encKey: String,
-        macKey: String
-    }
+    lastActivity: { type: Date, default: Date.now }
 });
 
 const Session = mongoose.model('Session', sessionSchema);
@@ -80,15 +66,6 @@ if (!fs.existsSync(SESSION_BASE_PATH)) {
 }
 
 // Utility Functions
-function generatePairingCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
-    for (let i = 0; i < 8; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-}
-
 function formatPhoneNumber(number) {
     try {
         const cleaned = number.toString().replace(/\D/g, '');
@@ -104,26 +81,21 @@ function formatPhoneNumber(number) {
     }
 }
 
-// Delay function for bulk messaging
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Browser configuration fix - windows method නැති නිසා custom එක use කරන්න
+// Browser configuration for Render
 const getBrowserConfig = () => {
-    // Check if Browsers.windows exists, otherwise use alternative
-    if (Browsers.windows) {
-        return Browsers.windows('Chrome');
-    } else if (Browsers.ubuntu) {
+    if (Browsers.ubuntu) {
         return Browsers.ubuntu('Chrome');
     } else {
-        // Custom browser configuration
-        return ['Windows', 'Chrome', '110.0.0.0'];
+        return ['Ubuntu', 'Chrome', '110.0.0.0'];
     }
 };
 
-// Initialize WhatsApp with Baileys
-async function initializeWhatsApp(manualData = null) {
+// Initialize WhatsApp
+async function initializeWhatsApp() {
     if (isInitializing) {
         console.log('⚠️ WhatsApp initialization already in progress');
         return;
@@ -131,57 +103,21 @@ async function initializeWhatsApp(manualData = null) {
 
     try {
         isInitializing = true;
-        console.log('🔄 Initializing WhatsApp...');
+        console.log('🔄 Initializing WhatsApp on Render...');
 
-        const sessionId = manualData?.sessionId || 'baileys-session-' + Date.now();
+        const sessionId = 'baileys-session-' + Date.now();
         const sessionPath = path.join(SESSION_BASE_PATH, sessionId);
 
-        let state;
-        let saveCredsFunction = null;
-
-        if (manualData) {
-            console.log('🔧 Using manual session data');
-            state = {
-                creds: {
-                    noiseKey: manualData.noiseKey,
-                    signedIdentityKey: manualData.signedIdentityKey,
-                    signedPreKey: manualData.signedPreKey,
-                    registrationId: manualData.registrationId,
-                    advSecretKey: manualData.advSecretKey,
-                    processedHistoryMessages: manualData.processedHistoryMessages || [],
-                    nextPreKeyId: manualData.nextPreKeyId || 1,
-                    firstUnuploadedPreKeyId: manualData.firstUnuploadedPreKeyId || 1,
-                    accountSettings: manualData.accountSettings || {},
-                    me: manualData.me,
-                    signalIdentities: manualData.signalIdentities || [],
-                    platform: manualData.platform || 'web'
-                },
-                keys: {
-                    get: (type, ids) => {
-                        if (type === 'pre-key' && manualData.preKeys) {
-                            return manualData.preKeys.filter(pk => ids.includes(pk.keyId));
-                        }
-                        return [];
-                    }
-                }
-            };
-        } else {
-            console.log('🔧 Using multi-file auth state');
-            const { state: authState, saveCreds } = await useMultiFileAuthState(sessionPath);
-            state = authState;
-            saveCredsFunction = saveCreds;
-        }
-
-        // Fixed browser configuration
+        const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+        
         const browserConfig = getBrowserConfig();
-        console.log('🔧 Using browser config:', browserConfig);
+        console.log('🔧 Using browser config for Render');
 
-        // Create socket with fixed configuration
         sock = makeWASocket({
             auth: state,
             printQRInTerminal: true,
             logger: pino({ level: 'silent' }),
-            browser: browserConfig, // Fixed browser config
+            browser: browserConfig,
             markOnlineOnConnect: false,
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
@@ -189,13 +125,11 @@ async function initializeWhatsApp(manualData = null) {
             keepAliveIntervalMs: 10000,
         });
 
-        if (saveCredsFunction) {
-            sock.ev.on('creds.update', saveCredsFunction);
-        }
+        sock.ev.on('creds.update', saveCreds);
 
-        // Enhanced Connection Handler
+        // Connection Handler
         sock.ev.on('connection.update', async (update) => {
-            const { connection, qr, lastDisconnect, isNewLogin } = update;
+            const { connection, qr, lastDisconnect } = update;
             
             console.log('🔗 Connection update:', connection);
 
@@ -232,8 +166,7 @@ async function initializeWhatsApp(manualData = null) {
                             qrCode: null,
                             pairingCode: null,
                             phoneNumber: userPhone,
-                            lastActivity: new Date(),
-                            connectionType: 'qr'
+                            lastActivity: new Date()
                         },
                         { upsert: true, new: true }
                     );
@@ -248,49 +181,23 @@ async function initializeWhatsApp(manualData = null) {
                 console.log('📵 Connection closed');
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 
-                if (statusCode === DisconnectReason.loggedOut || isNewLogin) {
+                if (statusCode === DisconnectReason.loggedOut) {
                     console.log('❌ Device logged out, clearing session...');
                     try {
                         await fs.remove(sessionPath);
-                        console.log('🗑️ Session files removed');
                     } catch (error) {
-                        console.log('ℹ️ No session files to remove');
+                        console.log('No session files to remove');
                     }
                     await Session.deleteMany({});
-                    console.log('🗑️ Database session cleared');
                 }
                 
                 isInitializing = false;
-                
-                const retryDelay = 10000;
-                console.log(`🔄 Attempting to reconnect in ${retryDelay/1000} seconds...`);
-                
-                setTimeout(() => {
-                    console.log('🔄 Starting reconnection...');
-                    initializeWhatsApp();
-                }, retryDelay);
-            }
-
-            if (connection === 'connecting') {
-                console.log('🔄 Connecting to WhatsApp...');
-                await Session.findOneAndUpdate(
-                    {},
-                    { 
-                        connected: false,
-                        lastActivity: new Date()
-                    },
-                    { upsert: true, new: true }
-                );
+                console.log('🔄 Attempting to reconnect in 10 seconds...');
+                setTimeout(() => initializeWhatsApp(), 10000);
             }
         });
 
-        sock.ev.on('messages.upsert', async (m) => {
-            if (m.messages && m.messages[0] && !m.messages[0].key.fromMe) {
-                console.log('📩 New message received');
-            }
-        });
-
-        console.log('🚀 WhatsApp client initialization started');
+        console.log('🚀 WhatsApp client initialization started on Render');
 
     } catch (error) {
         console.error('❌ WhatsApp initialization error:', error);
@@ -301,116 +208,461 @@ async function initializeWhatsApp(manualData = null) {
     }
 }
 
-// ==================== MANUAL SESSION & PAIRING CODE APIs ====================
+// ==================== API ROUTES ====================
 
-// Manual Session Connection
-app.post('/api/manual-session', async (req, res) => {
-    try {
-        const { 
-            sessionId, 
-            sessionToken, 
-            clientId, 
-            serverToken, 
-            encKey, 
-            macKey,
-            phoneNumber 
-        } = req.body;
-
-        console.log('📱 Manual session connection request');
-
-        if (!sessionId) {
-            return res.json({
-                success: false,
-                error: 'Session ID is required'
-            });
-        }
-
-        await Session.findOneAndUpdate(
-            {},
-            {
-                sessionId: sessionId,
-                connected: false,
-                connectionType: 'manual',
-                phoneNumber: phoneNumber,
-                lastActivity: new Date(),
-                manualSession: {
-                    sessionId: sessionId,
-                    sessionToken: sessionToken,
-                    clientId: clientId,
-                    serverToken: serverToken,
-                    encKey: encKey,
-                    macKey: macKey
-                }
-            },
-            { upsert: true, new: true }
-        );
-
-        console.log('💾 Manual session data saved');
-
-        const manualData = {
-            sessionId: sessionId,
-            noiseKey: { 
-                private: Buffer.from(encKey || 'default', 'base64'), 
-                public: Buffer.from(macKey || 'default', 'base64') 
-            },
-            signedIdentityKey: { 
-                private: Buffer.from(encKey || 'default', 'base64'), 
-                public: Buffer.from(macKey || 'default', 'base64') 
-            },
-            signedPreKey: {
-                keyId: 1,
-                keyPair: {
-                    private: Buffer.from(encKey || 'default', 'base64'),
-                    public: Buffer.from(macKey || 'default', 'base64')
-                },
-                signature: Buffer.from('signature', 'utf8')
-            },
-            registrationId: 123,
-            advSecretKey: clientId || 'default',
-            me: { 
-                id: phoneNumber ? formatPhoneNumber(phoneNumber) + '@s.whatsapp.net' : 'manual@session',
-                name: 'Manual Session User'
+// Serve main page
+app.get('/', (req, res) => {
+    const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WhatsApp Marketing Tool</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
             }
-        };
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 15px;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                overflow: hidden;
+            }
+            .header {
+                background: linear-gradient(135deg, #25D366, #128C7E);
+                color: white;
+                padding: 30px;
+                text-align: center;
+            }
+            .header h1 {
+                font-size: 2.5rem;
+                margin-bottom: 10px;
+            }
+            .content {
+                padding: 30px;
+            }
+            .status-card {
+                background: #f8f9fa;
+                border-radius: 10px;
+                padding: 20px;
+                margin-bottom: 20px;
+                border-left: 4px solid #007bff;
+            }
+            .status-connected {
+                border-left-color: #28a745;
+                background: #d4edda;
+            }
+            .status-disconnected {
+                border-left-color: #dc3545;
+                background: #f8d7da;
+            }
+            .qr-container {
+                text-align: center;
+                margin: 20px 0;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 10px;
+            }
+            .form-group {
+                margin-bottom: 20px;
+            }
+            .form-group label {
+                display: block;
+                margin-bottom: 5px;
+                font-weight: bold;
+                color: #333;
+            }
+            .form-group input {
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #e9ecef;
+                border-radius: 8px;
+                font-size: 16px;
+                transition: border-color 0.3s;
+            }
+            .form-group input:focus {
+                outline: none;
+                border-color: #007bff;
+            }
+            .btn {
+                background: linear-gradient(135deg, #007bff, #0056b3);
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 16px;
+                margin: 5px;
+                transition: transform 0.2s;
+            }
+            .btn:hover {
+                transform: translateY(-2px);
+            }
+            .btn-success {
+                background: linear-gradient(135deg, #28a745, #1e7e34);
+            }
+            .btn-danger {
+                background: linear-gradient(135deg, #dc3545, #c82333);
+            }
+            .message-log {
+                background: #f8f9fa;
+                border-radius: 10px;
+                padding: 15px;
+                margin-top: 20px;
+                max-height: 200px;
+                overflow-y: auto;
+            }
+            .log-entry {
+                padding: 8px;
+                border-bottom: 1px solid #dee2e6;
+                font-family: monospace;
+            }
+            .tab-container {
+                margin-top: 20px;
+            }
+            .tabs {
+                display: flex;
+                margin-bottom: 20px;
+            }
+            .tab {
+                padding: 12px 24px;
+                background: #f8f9fa;
+                border: none;
+                cursor: pointer;
+                margin-right: 5px;
+                border-radius: 8px 8px 0 0;
+            }
+            .tab.active {
+                background: #007bff;
+                color: white;
+            }
+            .tab-content {
+                display: none;
+            }
+            .tab-content.active {
+                display: block;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>📱 WhatsApp Marketing Tool</h1>
+                <p>Connect and manage your WhatsApp business messages</p>
+            </div>
+            
+            <div class="content">
+                <div id="statusCard" class="status-card">
+                    <h3>Connection Status</h3>
+                    <p id="statusText">Checking status...</p>
+                </div>
 
-        await initializeWhatsApp(manualData);
+                <div class="tabs">
+                    <button class="tab active" onclick="openTab('connectTab')">Connect</button>
+                    <button class="tab" onclick="openTab('messageTab')">Send Messages</button>
+                    <button class="tab" onclick="openTab('bulkTab')">Bulk Messages</button>
+                </div>
 
-        res.json({
-            success: true,
-            message: 'Manual session data received. Trying to connect...',
-            sessionId: sessionId
-        });
+                <div id="connectTab" class="tab-content active">
+                    <div class="form-group">
+                        <label>Connection Methods:</label>
+                        <div style="margin-top: 15px;">
+                            <button class="btn" onclick="getQRCode()">Get QR Code</button>
+                            <button class="btn" onclick="showPairingInput()">Use Pairing Code</button>
+                            <button class="btn btn-danger" onclick="newSession()">New Session</button>
+                        </div>
+                    </div>
 
-    } catch (error) {
-        console.error('❌ Manual session error:', error);
-        res.json({
-            success: false,
-            error: error.message
-        });
-    }
+                    <div id="qrContainer" class="qr-container" style="display: none;">
+                        <h3>Scan QR Code</h3>
+                        <img id="qrImage" src="" alt="QR Code" style="max-width: 300px;">
+                        <p>Open WhatsApp → Settings → Linked Devices → Scan QR Code</p>
+                    </div>
+
+                    <div id="pairingContainer" style="display: none;">
+                        <div class="form-group">
+                            <label for="pairingInput">Pairing Code:</label>
+                            <input type="text" id="pairingInput" placeholder="Enter pairing code (e.g., 4SHRJQRX)">
+                        </div>
+                        <div class="form-group">
+                            <label for="phoneInput">Phone Number:</label>
+                            <input type="text" id="phoneInput" placeholder="94769424903">
+                        </div>
+                        <button class="btn btn-success" onclick="submitPairing()">Connect with Pairing Code</button>
+                    </div>
+                </div>
+
+                <div id="messageTab" class="tab-content">
+                    <div class="form-group">
+                        <label for="singleNumber">Phone Number:</label>
+                        <input type="text" id="singleNumber" placeholder="94769424903">
+                    </div>
+                    <div class="form-group">
+                        <label for="singleMessage">Message:</label>
+                        <textarea id="singleMessage" placeholder="Type your message here..." style="width: 100%; height: 100px; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px;"></textarea>
+                    </div>
+                    <button class="btn btn-success" onclick="sendSingleMessage()">Send Message</button>
+                </div>
+
+                <div id="bulkTab" class="tab-content">
+                    <div class="form-group">
+                        <label for="bulkNumbers">Phone Numbers (one per line):</label>
+                        <textarea id="bulkNumbers" placeholder="94769424903\n94771234567\n94769874561" style="width: 100%; height: 100px; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px;"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="bulkMessage">Message:</label>
+                        <textarea id="bulkMessage" placeholder="Type your bulk message here..." style="width: 100%; height: 100px; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px;"></textarea>
+                    </div>
+                    <button class="btn btn-success" onclick="sendBulkMessages()">Send Bulk Messages</button>
+                </div>
+
+                <div class="message-log">
+                    <h4>Activity Log</h4>
+                    <div id="logContainer"></div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let statusCheckInterval;
+
+            function logMessage(message) {
+                const logContainer = document.getElementById('logContainer');
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+                logContainer.appendChild(logEntry);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+
+            function openTab(tabName) {
+                // Hide all tab contents
+                const tabContents = document.getElementsByClassName('tab-content');
+                for (let i = 0; i < tabContents.length; i++) {
+                    tabContents[i].classList.remove('active');
+                }
+
+                // Remove active class from all tabs
+                const tabs = document.getElementsByClassName('tab');
+                for (let i = 0; i < tabs.length; i++) {
+                    tabs[i].classList.remove('active');
+                }
+
+                // Show the specific tab content
+                document.getElementById(tabName).classList.add('active');
+                event.currentTarget.classList.add('active');
+            }
+
+            async function checkStatus() {
+                try {
+                    const response = await fetch('/api/status');
+                    const data = await response.json();
+                    
+                    const statusCard = document.getElementById('statusCard');
+                    const statusText = document.getElementById('statusText');
+                    
+                    statusText.textContent = data.message;
+                    
+                    if (data.connected) {
+                        statusCard.className = 'status-card status-connected';
+                        logMessage('✅ WhatsApp Connected');
+                    } else {
+                        statusCard.className = 'status-card status-disconnected';
+                        
+                        if (data.qrAvailable) {
+                            getQRCode();
+                        }
+                    }
+                    
+                } catch (error) {
+                    logMessage('❌ Error checking status: ' + error.message);
+                }
+            }
+
+            async function getQRCode() {
+                try {
+                    const response = await fetch('/api/qr');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        document.getElementById('qrImage').src = data.qr;
+                        document.getElementById('qrContainer').style.display = 'block';
+                        document.getElementById('pairingContainer').style.display = 'none';
+                        logMessage('📱 QR Code loaded - Please scan');
+                    } else {
+                        logMessage('⏳ QR code generating...');
+                    }
+                } catch (error) {
+                    logMessage('❌ Error getting QR code: ' + error.message);
+                }
+            }
+
+            function showPairingInput() {
+                document.getElementById('pairingContainer').style.display = 'block';
+                document.getElementById('qrContainer').style.display = 'none';
+            }
+
+            async function submitPairing() {
+                const pairingCode = document.getElementById('pairingInput').value;
+                const phoneNumber = document.getElementById('phoneInput').value;
+                
+                if (!pairingCode || !phoneNumber) {
+                    alert('Please enter both pairing code and phone number');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/api/input-pairing', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            pairingCode: pairingCode,
+                            phoneNumber: phoneNumber
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        logMessage('✅ Pairing code submitted: ' + pairingCode);
+                        document.getElementById('pairingContainer').style.display = 'none';
+                    } else {
+                        logMessage('❌ Pairing error: ' + data.error);
+                    }
+                } catch (error) {
+                    logMessage('❌ Network error: ' + error.message);
+                }
+            }
+
+            async function newSession() {
+                try {
+                    const response = await fetch('/api/new-session', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        logMessage('🆕 New session started');
+                        document.getElementById('qrContainer').style.display = 'none';
+                        document.getElementById('pairingContainer').style.display = 'none';
+                    }
+                } catch (error) {
+                    logMessage('❌ Error starting new session');
+                }
+            }
+
+            async function sendSingleMessage() {
+                const number = document.getElementById('singleNumber').value;
+                const message = document.getElementById('singleMessage').value;
+                
+                if (!number || !message) {
+                    alert('Please enter both number and message');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/api/send-message', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            number: number,
+                            message: message
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        logMessage('✅ Message sent to ' + number);
+                    } else {
+                        logMessage('❌ Send failed: ' + data.error);
+                    }
+                } catch (error) {
+                    logMessage('❌ Network error: ' + error.message);
+                }
+            }
+
+            async function sendBulkMessages() {
+                const numbersText = document.getElementById('bulkNumbers').value;
+                const message = document.getElementById('bulkMessage').value;
+                
+                if (!numbersText || !message) {
+                    alert('Please enter both numbers and message');
+                    return;
+                }
+                
+                const contacts = numbersText.split('\n').filter(num => num.trim() !== '');
+                
+                try {
+                    const response = await fetch('/api/send-bulk', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            contacts: contacts,
+                            message: message,
+                            delayMs: 2000
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        logMessage(`✅ Bulk messages sent: ${data.sent}/${contacts.length} successful`);
+                    } else {
+                        logMessage('❌ Bulk send failed: ' + data.error);
+                    }
+                } catch (error) {
+                    logMessage('❌ Network error: ' + error.message);
+                }
+            }
+
+            // Start checking status
+            statusCheckInterval = setInterval(checkStatus, 3000);
+            checkStatus();
+
+            // Initial log
+            logMessage('🚀 WhatsApp Marketing Tool Started');
+        </script>
+    </body>
+    </html>
+    `;
+    res.send(html);
 });
+
+// ==================== API ROUTES ====================
 
 // Simple Pairing Code Input
 app.post('/api/input-pairing', async (req, res) => {
     try {
         const { pairingCode, phoneNumber } = req.body;
 
-        console.log('📱 Manual pairing input received:', { 
-            pairingCode, 
-            phoneNumber 
-        });
+        console.log('📱 Manual pairing input received:', { pairingCode, phoneNumber });
 
         if (!pairingCode || !phoneNumber) {
             return res.json({
                 success: false,
                 error: 'Pairing code and phone number are required'
-            });
-        }
-
-        if (!/^[A-Z0-9]{6,8}$/.test(pairingCode)) {
-            return res.json({
-                success: false,
-                error: 'Invalid pairing code format. Should be 6-8 alphanumeric characters.'
             });
         }
 
@@ -434,12 +686,7 @@ app.post('/api/input-pairing', async (req, res) => {
         res.json({
             success: true,
             message: 'Pairing code received successfully!',
-            pairingCode: pairingCode,
-            nextSteps: [
-                'WhatsApp connection is being initialized...',
-                'Check status endpoint for connection updates',
-                'If connection fails, try QR code method'
-            ]
+            pairingCode: pairingCode
         });
 
     } catch (error) {
@@ -450,38 +697,6 @@ app.post('/api/input-pairing', async (req, res) => {
         });
     }
 });
-
-// Get Session Info
-app.get('/api/session-info', async (req, res) => {
-    try {
-        const session = await Session.findOne({});
-        
-        if (!session) {
-            return res.json({
-                success: false,
-                message: 'No active session'
-            });
-        }
-
-        res.json({
-            success: true,
-            sessionId: session.sessionId,
-            phoneNumber: session.phoneNumber,
-            connected: session.connected,
-            connectionType: session.connectionType,
-            lastActivity: session.lastActivity,
-            hasManualData: !!session.manualSession
-        });
-
-    } catch (error) {
-        res.json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// ==================== ENHANCED API ROUTES ====================
 
 // Status Check
 app.get('/api/status', async (req, res) => {
@@ -495,11 +710,9 @@ app.get('/api/status', async (req, res) => {
             hasSession: !!session,
             qrAvailable: session ? !!session.qrCode : false,
             pairingCodeAvailable: session ? !!session.pairingCode : false,
-            connectionType: session?.connectionType || 'none',
             message: isConnected ? 'WhatsApp Connected ✅' : 
                      session?.qrCode ? 'QR Available - Please Scan 📱' : 
                      session?.pairingCode ? 'Pairing Code Available 🔑' :
-                     session?.connectionType === 'manual' ? 'Manual Session Configured ⚙️' :
                      'Initializing...'
         });
     } catch (error) {
@@ -525,83 +738,6 @@ app.get('/api/qr', async (req, res) => {
         }
     } catch (error) {
         res.json({ success: false, error: error.message });
-    }
-});
-
-// Pairing Code Generation
-app.get('/api/pairing-code', async (req, res) => {
-    try {
-        const { number } = req.query;
-        
-        if (!number) {
-            return res.json({ 
-                success: false, 
-                error: 'Phone number is required' 
-            });
-        }
-
-        if (!sock || isInitializing) {
-            await initializeWhatsApp();
-            await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-
-        if (!sock) {
-            return res.json({
-                success: false,
-                error: 'WhatsApp client not initialized. Please try again.'
-            });
-        }
-
-        try {
-            const formattedNumber = formatPhoneNumber(number);
-            console.log(`📞 Generating pairing code for: ${formattedNumber}`);
-            
-            const pairingCode = await sock.requestPairingCode(formattedNumber);
-            
-            await Session.findOneAndUpdate(
-                {},
-                { 
-                    pairingCode: pairingCode,
-                    phoneNumber: formattedNumber,
-                    connectionType: 'pairing',
-                    lastActivity: new Date(),
-                    connected: false,
-                    qrCode: null
-                },
-                { upsert: true, new: true }
-            );
-
-            console.log(`✅ Pairing code generated for ${formattedNumber}: ${pairingCode}`);
-            
-            res.json({
-                success: true,
-                pairingCode: pairingCode,
-                message: `Pairing code generated successfully!`,
-                instructions: [
-                    '1. Open WhatsApp on your phone',
-                    '2. Go to Settings → Linked Devices → Link a Device',
-                    '3. Select "Link with phone number"', 
-                    '4. Enter this code: ' + pairingCode,
-                    '5. Wait for connection confirmation'
-                ]
-            });
-
-        } catch (error) {
-            console.error('❌ Pairing code generation error:', error);
-            
-            res.json({ 
-                success: false, 
-                error: 'Pairing code generation failed. Please use QR code method.',
-                fallback: true
-            });
-        }
-
-    } catch (error) {
-        console.error('❌ Pairing endpoint error:', error);
-        res.json({ 
-            success: false, 
-            error: 'Server error: ' + error.message 
-        });
     }
 });
 
@@ -726,42 +862,6 @@ app.post('/api/send-bulk', async (req, res) => {
     }
 });
 
-// Test connection endpoint
-app.get('/api/test-connection', async (req, res) => {
-    try {
-        const session = await Session.findOne({});
-        
-        res.json({
-            success: true,
-            sessionExists: !!session,
-            currentSession: session ? {
-                phoneNumber: session.phoneNumber,
-                connected: session.connected,
-                connectionType: session.connectionType,
-                hasPairingCode: !!session.pairingCode,
-                hasQRCode: !!session.qrCode
-            } : null,
-            whatsappState: sock ? {
-                initialized: true,
-                connected: !!sock.user,
-                user: sock.user ? 'Logged in' : 'Not logged in'
-            } : {
-                initialized: false,
-                connected: false
-            },
-            recommendations: session ? 
-                (session.connected ? 
-                    '✅ Everything is working!' : 
-                    (session.pairingCode ? 
-                        '⏳ Waiting for pairing confirmation...' : 
-                        '📱 Please scan QR code or enter pairing code')) :
-                '🔧 Please initialize a new session'
-        });
-    } catch (error) {
-        res.json({ success: false, error: error.message });
-    }
-});
-
 // Health Check
 app.get('/api/health', async (req, res) => {
     try {
@@ -773,10 +873,6 @@ app.get('/api/health', async (req, res) => {
             status: 'running',
             database: dbStatus === 1 ? 'connected' : 'disconnected',
             whatsapp: whatsappStatus,
-            connection_type: session?.connectionType || 'none',
-            qr_available: session ? !!session.qrCode : false,
-            pairing_code_available: session ? !!session.pairingCode : false,
-            manual_session: !!session?.manualSession,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -796,12 +892,6 @@ mongoose.connection.on('connected', () => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🔗 Health: http://localhost:${PORT}/api/health`);
-    console.log('📱 WhatsApp Marketing Tool with Manual Session Support - READY!');
-    console.log('✅ Fixed Browser Configuration');
-    console.log('✅ Fixed CORS Issues');
-    console.log('✅ Manual Session Input');
-    console.log('✅ Pairing Code Support');
-    console.log('✅ QR Code Generation');
-    console.log('✅ Bulk Messaging');
+    console.log(`🌐 Open: http://localhost:${PORT}`);
+    console.log('📱 WhatsApp Marketing Tool - READY for Render!');
 });
