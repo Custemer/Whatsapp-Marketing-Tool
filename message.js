@@ -1,20 +1,10 @@
 const express = require("express");
-const mongoose = require('mongoose');
 const { delay } = require("@whiskeysockets/baileys");
 
+const Session = require("./models/Session");
+const { whatsappClient } = require("./pair");
+
 let router = express.Router();
-
-// Session Schema (same as in pair.js)
-const sessionSchema = new mongoose.Schema({
-    sessionId: String,
-    phoneNumber: String,
-    connected: { type: Boolean, default: false },
-    pairingCode: String,
-    lastActivity: { type: Date, default: Date.now },
-    userData: Object
-});
-
-const Session = mongoose.model('Session', sessionSchema);
 
 // Format phone number
 function formatPhoneNumber(number) {
@@ -44,10 +34,9 @@ router.post("/send-message", async (req, res) => {
             });
         }
 
-        // Get WhatsApp client from pair.js (you might need to export it)
-        const whatsappClient = require('./pair').whatsappClient;
+        const client = whatsappClient();
         
-        if (!whatsappClient || !whatsappClient.user) {
+        if (!client || !client.user) {
             return res.json({ 
                 success: false, 
                 error: 'WhatsApp not connected. Please connect first using pairing code.' 
@@ -56,12 +45,15 @@ router.post("/send-message", async (req, res) => {
 
         const formattedNumber = formatPhoneNumber(number) + '@s.whatsapp.net';
         
-        await whatsappClient.sendMessage(formattedNumber, { text: message });
+        await client.sendMessage(formattedNumber, { text: message });
         
-        // Update last activity
+        // Update last activity and increment message count
         await Session.findOneAndUpdate(
             {},
-            { lastActivity: new Date() },
+            { 
+                lastActivity: new Date(),
+                $inc: { messageCount: 1 }
+            },
             { upsert: true, new: true }
         );
 
@@ -91,9 +83,9 @@ router.post("/send-bulk", async (req, res) => {
             });
         }
 
-        const whatsappClient = require('./pair').whatsappClient;
+        const client = whatsappClient();
         
-        if (!whatsappClient || !whatsappClient.user) {
+        if (!client || !client.user) {
             return res.json({ 
                 success: false, 
                 error: 'WhatsApp not connected' 
@@ -107,7 +99,7 @@ router.post("/send-bulk", async (req, res) => {
             const number = contacts[i];
             try {
                 const formattedNumber = formatPhoneNumber(number) + '@s.whatsapp.net';
-                await whatsappClient.sendMessage(formattedNumber, { text: message });
+                await client.sendMessage(formattedNumber, { text: message });
                 results.push({ number, status: 'success' });
                 successCount++;
                 
@@ -120,10 +112,13 @@ router.post("/send-bulk", async (req, res) => {
             }
         }
 
-        // Update last activity
+        // Update last activity and message count
         await Session.findOneAndUpdate(
             {},
-            { lastActivity: new Date() },
+            { 
+                lastActivity: new Date(),
+                $inc: { messageCount: successCount }
+            },
             { upsert: true, new: true }
         );
 
@@ -148,10 +143,10 @@ router.post("/send-bulk", async (req, res) => {
 router.get("/stats", async (req, res) => {
     try {
         const session = await Session.findOne({});
-        const whatsappClient = require('./pair').whatsappClient;
+        const client = whatsappClient();
         
         res.json({
-            connected: whatsappClient && whatsappClient.user,
+            connected: client && client.user,
             phoneNumber: session?.phoneNumber,
             lastActivity: session?.lastActivity,
             totalMessages: session?.messageCount || 0
