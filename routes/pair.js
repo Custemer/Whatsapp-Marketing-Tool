@@ -161,6 +161,10 @@ router.get("/status", async (req, res) => {
     }
 });
 
-// Export whatsappClient for use in other files
-module.exports.getWhatsAppClient = () => whatsappClient;
-module.exports.router = router;
+// Export function to get WhatsApp client
+function getWhatsAppClient() {
+    return whatsappClient;
+}
+
+module.exports = router;
+module.exports.getWhatsAppClient = getWhatsAppClient;
