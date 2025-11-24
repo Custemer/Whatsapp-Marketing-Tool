@@ -1,11 +1,21 @@
 const express = require("express");
 const { delay } = require("@whiskeysockets/baileys");
+const multer = require('multer');
 
 const Session = require("../models/Session");
 const Contact = require("../models/Contact");
 const { getWhatsAppClient } = require("./pair");
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({ 
+    storage: storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    }
+});
 
 // Format phone number
 function formatPhoneNumber(number) {
@@ -23,8 +33,8 @@ function formatPhoneNumber(number) {
     }
 }
 
-// Advanced bulk messaging
-router.post("/bulk-with-images", async (req, res) => {
+// Advanced bulk messaging with images
+router.post("/bulk-with-images", upload.array('images', 5), async (req, res) => {
     try {
         const { 
             contacts, 
@@ -75,7 +85,20 @@ router.post("/bulk-with-images", async (req, res) => {
             
             try {
                 const formattedNumber = formatPhoneNumber(number) + '@s.whatsapp.net';
-                await client.sendMessage(formattedNumber, { text: message });
+                
+                let messageOptions = { text: message };
+                
+                // Add image if available
+                if (req.files && req.files.length > 0) {
+                    const image = req.files[0];
+                    messageOptions = {
+                        image: image.buffer,
+                        caption: message,
+                        mimetype: image.mimetype
+                    };
+                }
+                
+                await client.sendMessage(formattedNumber, messageOptions);
                 results.push({ number, status: 'success' });
                 successCount++;
                 
@@ -224,18 +247,6 @@ router.post("/smart-bulk", async (req, res) => {
     }
 });
 
-// Helper function to personalize messages
-function personalizeMessage(template, contact) {
-    let message = template;
-    
-    // Replace placeholders with contact data
-    message = message.replace(/{{name}}/g, contact.name || 'there');
-    message = message.replace(/{{phone}}/g, contact.phoneNumber);
-    message = message.replace(/{{location}}/g, contact.location || 'your area');
-    message = message.replace(/{{business}}/g, contact.businessType || 'business');
-
-// Add this new endpoint to advanced-messaging.js
-
 // Category-based messaging
 router.post("/category-bulk", async (req, res) => {
     try {
@@ -275,7 +286,7 @@ router.post("/category-bulk", async (req, res) => {
 
         // Build filter query based on category filters
         const filterQuery = buildFilterQuery(category.filters);
-        filterQuery.categories = categoryId; // Include category filter
+        filterQuery.categories = categoryId;
 
         const contacts = await Contact.find(filterQuery);
         
@@ -357,7 +368,20 @@ router.post("/category-bulk", async (req, res) => {
     }
 });
 
-// Helper function to build filter query (same as in categories.js)
+// Helper function to personalize messages
+function personalizeMessage(template, contact) {
+    let message = template;
+    
+    // Replace placeholders with contact data
+    message = message.replace(/{{name}}/g, contact.name || 'there');
+    message = message.replace(/{{phone}}/g, contact.phoneNumber);
+    message = message.replace(/{{location}}/g, contact.location || 'your area');
+    message = message.replace(/{{business}}/g, contact.businessType || 'business');
+    
+    return message;
+}
+
+// Helper function to build filter query
 function buildFilterQuery(filters) {
     const query = {};
     
@@ -385,19 +409,7 @@ function buildFilterQuery(filters) {
         }
     }
     
-    if (filters.lastContacted && filters.lastContacted.from) {
-        query.lastContacted = { $gte: new Date(filters.lastContacted.from) };
-        
-        if (filters.lastContacted.to) {
-            query.lastContacted.$lte = new Date(filters.lastContacted.to);
-        }
-    }
-    
     return query;
-}
-
-    
-    return message;
 }
 
 module.exports = router;
