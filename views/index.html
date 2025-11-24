@@ -1357,77 +1357,107 @@ function usePreviewedNumbers() {
         logMessage(`📋 ${window.previewedNumbers.length} previewed numbers loaded to detection tab`);
     }
 }
-        // Number Detection Functions
-        async function detectActiveNumbers() {
-            const numbersText = document.getElementById('detectionNumbers').value;
-            const autoCategorize = document.getElementById('autoCategorize').checked;
-            const categoryName = document.getElementById('detectionCategory').value;
-            const businessType = document.getElementById('detectionBusiness').value;
-            const location = document.getElementById('detectionLocation').value;
+     // Number Detection Functions
+async function detectActiveNumbers() {
+    const numbersText = document.getElementById('detectionNumbers').value;
+    const autoCategorize = document.getElementById('autoCategorize').checked;
+    const categoryName = document.getElementById('detectionCategory').value;
+    const businessType = document.getElementById('detectionBusiness').value;
+    const location = document.getElementById('detectionLocation').value;
+    
+    if (!numbersText) {
+        alert('Please enter phone numbers to detect');
+        return;
+    }
+    
+    const numbers = numbersText.split('\n').filter(num => num.trim() !== '');
+    
+    try {
+        showLoading('Detecting active numbers...');
+        const response = await fetch('/api/detection/detect-active', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                numbers: numbers,
+                autoCategorize: autoCategorize,
+                categoryName: categoryName,
+                businessType: businessType,
+                location: location
+            })
+        });
+        
+        const data = await response.json();
+        hideLoading();
+        
+        if (data.success) {
+            // ✅ NEW: Save active numbers to localStorage and cache
+            const activeNumbers = data.results
+                .filter(result => result.status === 'active')
+                .map(result => result.number);
             
-            if (!numbersText) {
-                alert('Please enter phone numbers to detect');
-                return;
-            }
+            activeNumbersCache = activeNumbers;
             
-            const numbers = numbersText.split('\n').filter(num => num.trim() !== '');
+            localStorage.setItem('whatsapp_detection_results', JSON.stringify({
+                activeNumbers: activeNumbers,
+                timestamp: new Date().toISOString(),
+                total: data.total,
+                active: data.active,
+                inactive: data.inactive
+            }));
             
-            try {
-                showLoading('Detecting active numbers...');
-                const response = await fetch('/api/detection/detect-active', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        numbers: numbers,
-                        autoCategorize: autoCategorize,
-                        categoryName: categoryName,
-                        businessType: businessType,
-                        location: location
-                    })
-                });
-                
-                const data = await response.json();
-                hideLoading();
-                
-                if (data.success) {
-                    const resultsDiv = document.getElementById('detectionResults');
-                    resultsDiv.innerHTML = `
-                        <div class="alert alert-success">
-                            <h4>Detection Results</h4>
-                            <p><strong>Total:</strong> ${data.total} | <strong>Active:</strong> ${data.active} | <strong>Inactive:</strong> ${data.inactive}</p>
-                            <p><strong>Active Percentage:</strong> ${data.activePercentage}%</p>
-                            ${data.category ? `<p><strong>Category Created:</strong> ${data.category.name} (${data.category.contactCount} contacts)</p>` : ''}
-                        </div>
-                        <div class="results-container">
-                            ${data.results.map(result => `
-                                <div class="result-item ${result.status === 'active' ? 'result-success' : 'result-error'}">
-                                    <div>
-                                        <strong>${result.number}</strong>
-                                        ${result.profileName ? ` - ${result.profileName}` : ''}
-                                    </div>
-                                    <span>${result.status}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
+            const resultsDiv = document.getElementById('detectionResults');
+            resultsDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h4>Detection Results</h4>
+                    <p><strong>Total:</strong> ${data.total} | <strong>Active:</strong> ${data.active} | <strong>Inactive:</strong> ${data.inactive}</p>
+                    <p><strong>Active Percentage:</strong> ${data.activePercentage}%</p>
+                    ${data.category ? `<p><strong>Category Created:</strong> ${data.category.name} (${data.category.contactCount} contacts)</p>` : ''}
                     
-                    logMessage(`✅ Number detection completed: ${data.active}/${data.total} active numbers found`);
-      }
-                    
-                    // Refresh categories if any were created
-                    if (data.category) {
-                        loadCategories();
-                    }
-                } else {
-                    logMessage('❌ Detection failed: ' + data.error, 'error');
-                }
-            } catch (error) {
-                hideLoading();
-                logMessage('❌ Detection error: ' + error.message, 'error');
+                    <!-- NEW: Add copy buttons -->
+                    ${data.active > 0 ? `
+                        <div style="margin-top: 15px; padding: 10px; background: #d4edda; border-radius: 5px;">
+                            <h5>Quick Actions:</h5>
+                            <button class="btn btn-success btn-sm" onclick="copyActiveNumbers()">
+                                <i class="fas fa-copy"></i> Copy ${data.active} Active Numbers
+                            </button>
+                            <button class="btn btn-info btn-sm" onclick="downloadActiveNumbers()" style="margin-left: 10px;">
+                                <i class="fas fa-download"></i> Download as TXT
+                            </button>
+                            <button class="btn btn-warning btn-sm" onclick="loadActiveNumbersToMessaging()" style="margin-left: 10px;">
+                                <i class="fas fa-paper-plane"></i> Use for Messaging
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="results-container">
+                    ${data.results.map(result => `
+                        <div class="result-item ${result.status === 'active' ? 'result-success' : 'result-error'}">
+                            <div>
+                                <strong>${result.number}</strong>
+                                ${result.profileName ? ` - ${result.profileName}` : ''}
+                            </div>
+                            <span>${result.status === 'active' ? '✅ Active' : '❌ Inactive'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            logMessage(`✅ Number detection completed: ${data.active}/${data.total} active numbers found`);
+            
+            // Refresh categories if any were created
+            if (data.category) {
+                loadCategories();
             }
+        } else {
+            logMessage('❌ Detection failed: ' + data.error, 'error');
         }
+    } catch (error) {
+        hideLoading();
+        logMessage('❌ Detection error: ' + error.message, 'error');
+    }
+}
 // Global variable to store active numbers
 let activeNumbersCache = [];
 
