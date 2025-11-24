@@ -50,8 +50,9 @@ router.post("/detect-active", async (req, res) => {
 
         const results = [];
         let activeCount = 0;
+        const activeNumbers = []; // Store active numbers for copying
 
-        for (const number of numbers.slice(0, 100)) { // Increased limit to 100
+        for (const number of numbers.slice(0, 100)) {
             try {
                 const cleanedNumber = number.replace(/\D/g, '');
                 const formattedNumber = cleanedNumber + '@s.whatsapp.net';
@@ -63,9 +64,15 @@ router.post("/detect-active", async (req, res) => {
                     // Get profile info
                     let profileName = null;
                     try {
-                        const profile = await client.getProfilePicture(result.jid);
+                        const profile = await client.profilePictureUrl(result.jid);
                         if (profile) {
-                            profileName = (await client.fetchStatus(result.jid))?.status || null;
+                            // Try to get status
+                            try {
+                                const status = await client.fetchStatus(result.jid);
+                                profileName = status?.status || null;
+                            } catch (statusError) {
+                                // Status might not be available
+                            }
                         }
                     } catch (error) {
                         // Profile might not be available
@@ -112,6 +119,9 @@ router.post("/detect-active", async (req, res) => {
                     });
                     activeCount++;
                     
+                    // Add to active numbers list for copying
+                    activeNumbers.push(cleanedNumber);
+                    
                 } else {
                     results.push({
                         number: cleanedNumber,
@@ -144,7 +154,9 @@ router.post("/detect-active", async (req, res) => {
             active: activeCount,
             inactive: numbers.length - activeCount,
             activePercentage: ((activeCount / numbers.length) * 100).toFixed(2),
-            category: category
+            category: category,
+            activeNumbers: activeNumbers, // Return active numbers for copying
+            activeNumbersText: activeNumbers.join('\n') // Ready-to-copy text
         });
 
     } catch (error) {
@@ -153,6 +165,110 @@ router.post("/detect-active", async (req, res) => {
             success: false, 
             error: 'Number detection failed: ' + error.message 
         });
+    }
+});
+
+// NEW: Get only active numbers from previous detection
+router.get("/active-numbers", async (req, res) => {
+    try {
+        const activeContacts = await Contact.find({ 
+            'whatsappStatus.isOnWhatsApp': true,
+            status: 'active'
+        })
+        .select('phoneNumber name')
+        .sort({ lastChecked: -1 })
+        .limit(200);
+
+        const activeNumbers = activeContacts.map(contact => contact.phoneNumber);
+        
+        res.json({
+            success: true,
+            activeNumbers: activeNumbers,
+            activeNumbersText: activeNumbers.join('\n'),
+            totalActive: activeNumbers.length,
+            contacts: activeContacts
+        });
+
+    } catch (error) {
+        console.error('Get active numbers error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// NEW: Export active numbers to file
+router.get("/export-active", async (req, res) => {
+    try {
+        const { format = 'txt' } = req.query;
+        
+        const activeContacts = await Contact.find({ 
+            'whatsappStatus.isOnWhatsApp': true,
+            status: 'active'
+        })
+        .select('phoneNumber name businessType location')
+        .sort({ createdAt: -1 });
+
+        let content = '';
+        let filename = '';
+
+        if (format === 'csv') {
+            // CSV format
+            content = 'Phone Number,Name,Business Type,Location\n';
+            activeContacts.forEach(contact => {
+                content += `${contact.phoneNumber},${contact.name || ''},${contact.businessType || ''},${contact.location || ''}\n`;
+            });
+            filename = 'active_whatsapp_numbers.csv';
+            res.setHeader('Content-Type', 'text/csv');
+        } else {
+            // TXT format (default)
+            content = activeContacts.map(contact => contact.phoneNumber).join('\n');
+            filename = 'active_whatsapp_numbers.txt';
+            res.setHeader('Content-Type', 'text/plain');
+        }
+
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(content);
+
+    } catch (error) {
+        console.error('Export active numbers error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// NEW: Copy active numbers to clipboard (via API)
+router.post("/copy-active", async (req, res) => {
+    try {
+        const { numbers } = req.body;
+        
+        let activeNumbers = [];
+        
+        if (numbers && numbers.length > 0) {
+            // Use provided numbers
+            activeNumbers = Array.isArray(numbers) ? numbers : numbers.split('\n').filter(n => n.trim());
+        } else {
+            // Get all active numbers from database
+            const activeContacts = await Contact.find({ 
+                'whatsappStatus.isOnWhatsApp': true,
+                status: 'active'
+            })
+            .select('phoneNumber')
+            .limit(500);
+            
+            activeNumbers = activeContacts.map(contact => contact.phoneNumber);
+        }
+
+        const activeNumbersText = activeNumbers.join('\n');
+        
+        res.json({
+            success: true,
+            message: `Copied ${activeNumbers.length} active numbers to clipboard`,
+            activeNumbers: activeNumbers,
+            activeNumbersText: activeNumbersText,
+            total: activeNumbers.length
+        });
+
+    } catch (error) {
+        console.error('Copy active numbers error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -200,13 +316,6 @@ router.post("/detect-from-file", async (req, res) => {
         });
     }
 });
-
-// Helper function for number detection with categorization
-async function detectNumbersWithCategorization(numbers, autoCategorize, categoryName) {
-    // Implementation similar to detect-active endpoint
-    // This would contain the detection logic
-    return { success: true, numbers: numbers.length };
-}
 
 // Get detection analytics
 router.get("/analytics", async (req, res) => {
@@ -256,7 +365,6 @@ router.get("/analytics", async (req, res) => {
 
 // Helper function to update category contact count
 async function updateCategoryContactCount(categoryId) {
-    const Category = require('../models/Category');
     const category = await Category.findById(categoryId);
     if (!category) return;
     
