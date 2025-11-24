@@ -1414,6 +1414,20 @@ function usePreviewedNumbers() {
                     `;
                     
                     logMessage(`✅ Number detection completed: ${data.active}/${data.total} active numbers found`);
+      }
+                    
+                    // Refresh categories if any were created
+                    if (data.category) {
+                        loadCategories();
+                    }
+                } else {
+                    logMessage('❌ Detection failed: ' + data.error, 'error');
+                }
+            } catch (error) {
+                hideLoading();
+                logMessage('❌ Detection error: ' + error.message, 'error');
+            }
+        }
 
                 // NEW: Copy active numbers functions
 async function copyActiveNumbers() {
@@ -1664,21 +1678,7 @@ async function saveActiveNumbersToCategory(activeNumbers) {
             alert('❌ Error creating category: ' + error.message);
         }
     }
-}
-                    
-                    // Refresh categories if any were created
-                    if (data.category) {
-                        loadCategories();
-                    }
-                } else {
-                    logMessage('❌ Detection failed: ' + data.error, 'error');
-                }
-            } catch (error) {
-                hideLoading();
-                logMessage('❌ Detection error: ' + error.message, 'error');
-            }
-        }
-
+    
         // Category Management
         async function loadCategories() {
             try {
